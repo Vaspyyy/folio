@@ -1,0 +1,22 @@
+{
+  "name": "folio-library",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test extension/tests/*.test.js packages/local-recommender/test/*.test.js",
+    "test:recommender": "node --test packages/local-recommender/test/*.test.js",
+    "check": "npm test && npm run build",
+    "test:browser": "npm run build && node scripts/smoke.mjs && node scripts/reader-smoke.mjs && node scripts/bookshelf-smoke.mjs && node scripts/workspace-smoke.mjs",
+    "test:live": "npm run build && node scripts/reader-smoke.mjs --live",
+    "format": "prettier --write extension/src extension/tests scripts"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^30.1.1",
+    "playwright": "^1.63.0",
+    "prettier": "^3.9.9"
+  }
+}

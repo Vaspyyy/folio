@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Folio · Your personal bookshelf</title>
+    <link rel="stylesheet" href="library.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to library</a>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="library.html" aria-label="Folio home"
+          ><span class="brand-mark">f.</span>folio<span class="brand-caption"
+            >A HOME FOR YOUR STORIES</span
+          ></a
+        >
+        <div class="nav-caption">YOUR LIBRARY</div>
+        <nav aria-label="Reading status" id="navigation"></nav>
+        <nav aria-label="Special shelves" id="special-nav"></nav>
+        <div id="collection-nav" aria-label="Collection shelves"></div>
+        <div class="sidebar-note">
+          <span class="small-star">✧</span>
+          <p>A good story<br />stays with you.</p>
+          <span>Keep your place. Come back anytime.</span>
+        </div>
+        <div class="sidebar-foot">
+          <span class="local-dot"></span> Stored on this device<button
+            id="export"
+          >
+            Export your library <span aria-hidden="true">↗</span></button
+          ><button id="import-button">
+            Import a backup <span aria-hidden="true">＋</span></button
+          ><input
+            id="import"
+            type="file"
+            accept="application/json,.json"
+            hidden
+          />
+        </div>
+      </aside>
+      <main id="main">
+        <header class="page-header">
+          <div>
+            <div class="eyebrow">
+              THE PERSONAL EDITION <span> / </span>
+              <span id="edition-count">YOUR COLLECTION</span>
+            </div>
+            <h1>A world between pages.</h1>
+            <p class="intro">
+              Your favorites, your next discoveries, your place in every story.
+            </p>
+          </div>
+          <div class="header-tools">
+            <div class="workspace-tools">
+              <button id="privacy" aria-pressed="false">Hide library ◉</button>
+              <details id="appearance">
+                <summary>Appearance ◐</summary>
+                <div>
+                  <label
+                    >Theme<select id="theme" aria-label="Theme">
+                      <option value="light">Paper</option>
+                      <option value="dark">Midnight</option>
+                      <option value="system">System</option>
+                    </select></label
+                  ><label
+                    >Shelf density<select
+                      id="density"
+                      aria-label="Shelf density"
+                    >
+                      <option value="comfortable">Comfortable</option>
+                      <option value="compact">Compact</option>
+                    </select></label
+                  >
+                </div>
+              </details>
+            </div>
+            <button
+              id="artwork"
+              role="switch"
+              aria-checked="false"
+              title="Load cover images from the source website"
+            >
+              <span class="toggle-track" aria-hidden="true"></span>Cover artwork</button
+            ><span class="artwork-note">Off keeps your shelf image-free</span>
+          </div>
+        </header>
+        <section id="privacy-screen" class="empty" hidden>
+          <span class="eyebrow">A MOMENT TO YOURSELF</span>
+          <h2>Your shelf is tucked away.</h2>
+          <p>Titles and artwork are hidden until you reveal your library.</p>
+          <button id="reveal" class="read">Reveal library</button>
+        </section>
+        <section id="continue-section" aria-labelledby="continue-title" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">CONTINUE READING</span>
+              <h2 id="continue-title">One more chapter.</h2>
+            </div>
+            <button
+              id="continue-count"
+              class="section-aside"
+              title="Show every title in progress"
+            ></button>
+          </div>
+          <div id="continue-content" class="continue-layout"></div>
+        </section>
+        <section class="shelf-section" aria-labelledby="shelf-title">
+          <div class="section-heading shelf-heading">
+            <div>
+              <span class="eyebrow">COLLECTED, JUST FOR YOU</span>
+              <h2 id="shelf-title">
+                <span id="shelf-name">The bookshelf</span>
+                <span id="shelf-total"></span>
+              </h2>
+            </div>
+            <span id="shelf-description" class="section-aside"
+              >Every story has a place.</span
+            >
+          </div>
+          <section id="collection-mosaic" hidden></section>
+          <div id="updates-toolbar" hidden>
+            <div>
+              <h3>Keep up with your stories.</h3>
+              <p>
+                Check followed titles for new pages. Your reading status stays
+                yours.
+              </p>
+            </div>
+            <button id="check-updates" class="read">Check for updates</button
+            ><button id="cancel-check" hidden>Stop</button
+            ><span id="update-status" role="status"></span>
+            <ul id="update-errors"></ul>
+          </div>
+          <section class="filters" aria-label="Library filters">
+            <label class="search-label"
+              ><span class="sr-only">Find a title</span
+              ><span aria-hidden="true" class="search-icon">⌕</span
+              ><input
+                id="search"
+                type="search"
+                placeholder="Find a story on your shelf…" /></label
+            ><label
+              ><span class="sr-only">Collection</span
+              ><select id="collection">
+                <option value="">All collections</option>
+              </select></label
+            ><label
+              ><span class="sr-only">Sort by</span
+              ><select id="sort">
+                <option value="manual">Shelf order</option>
+                <option value="recent" selected>Recently active</option>
+                <option value="title">Title A–Z</option>
+                <option value="pages">Page count</option>
+              </select></label
+            >
+          </section>
+          <div class="results-line">
+            <span id="count"></span
+            ><button id="clear-filters" hidden>Clear filters ×</button>
+          </div>
+          <section
+            id="entries"
+            class="grid"
+            aria-label="Saved titles"
+          ></section>
+          <section id="empty" class="empty" hidden>
+            <div class="empty-books" aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+            <span class="eyebrow">THE FIRST PAGE IS YOURS</span>
+            <h2>A shelf full of possibilities.</h2>
+            <p>
+              Save a title with the Folio companion while you browse.<br />We’ll
+              keep it here, along with your place in the story.
+            </p>
+            <a
+              class="read"
+              href="https://multporn.net/"
+              target="_blank"
+              rel="noreferrer"
+              >Find your first story <span aria-hidden="true">↗</span></a
+            >
+          </section>
+          <div id="no-results" class="empty" hidden>
+            <span class="eyebrow">A LITTLE TOO SPECIFIC?</span>
+            <h2>No stories found.</h2>
+            <p>
+              Try another title or clear your filters to see the whole shelf.
+            </p>
+          </div>
+        </section>
+        <footer class="main-footer">
+          <span
+            >FOLIO <span aria-hidden="true"> / </span> THE PERSONAL
+            LIBRARY</span
+          ><span>A little space, entirely yours.</span>
+        </footer>
+      </main>
+    </div>
+    <dialog id="title-drawer" aria-labelledby="drawer-title">
+      <div id="drawer-content"></div>
+    </dialog>
+    <div id="message" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="library.js"></script>
+  </body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Folio \u2014 Personal Comic Library",
+  "version": "0.4.0",
+  "description": "Save titles, organize a personal library, and keep your reading place.",
+  "action": {
+    "default_title": "Open Folio library"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://multporn.net/*"
+      ],
+      "js": [
+        "juicebox-bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://multporn.net/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "https://multporn.net/*"
+  ]
+}
