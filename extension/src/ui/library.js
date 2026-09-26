@@ -1,5 +1,9 @@
 import { request } from "../client.js";
 import { coverUrl, newPages } from "../core/model.js";
+import {
+  createExploreSlider,
+  createRecommendationEngine,
+} from "../core/recommender.js";
 import { readingProgress, continueReading } from "./presentation.js";
 import { createWorkspace } from "./workspace.js";
 let workspace;
@@ -15,7 +19,24 @@ let entries = [],
   active = "all",
   artwork = false,
   refreshVersion = 0,
-  toastTimer;
+  toastTimer,
+  results = new Map();
+const storage = () => {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+};
+let engine, recommendationError;
+try {
+  engine = createRecommendationEngine({ storage: storage() });
+} catch (error) {
+  // A corrupt saved profile must not take the library down: ranking continues
+  // from the current library alone and the failure is reported on load.
+  recommendationError = error.message;
+  engine = createRecommendationEngine();
+}
 try {
   artwork = localStorage.getItem("folio:artwork") === "true";
 } catch {}
@@ -131,6 +152,7 @@ async function refresh() {
   const data = await request("list");
   if (version !== refreshVersion) return;
   entries = data;
+  results = engine.update(entries);
   const selected = $("collection").value;
   $("collection").replaceChildren(new Option("All collections", ""));
   const names = [
@@ -275,6 +297,56 @@ function renderContinue() {
     $("continue-content").append(queue);
   }
 }
+// "For you" cards explain their position and accept explicit feedback. Both
+// strings come from the recommender and are rendered as plain text.
+function why(entry) {
+  const result = results.get(entry.metadata.id),
+    rating = engine.rating(entry.metadata.id),
+    block = node("div", undefined, "why");
+  block.append(
+    node(
+      "p",
+      result?.explanations[0] ||
+        "No preference signals apply to this title yet.",
+      "why-text",
+    ),
+  );
+  const controls = node("div", undefined, "rate-controls");
+  for (const [value, label] of [
+    [1, "More like this"],
+    [-1, "Less like this"],
+  ]) {
+    const button = node("button", label, "rate");
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(rating === value));
+    button.setAttribute("aria-label", `${label}: ${entry.metadata.title}`);
+    button.title =
+      value > 0
+        ? "Rank more titles with these tags higher"
+        : "Rank titles with these tags lower";
+    button.onclick = () => rate(entry, rating === value ? null : value, label);
+    controls.append(button);
+  }
+  block.append(controls);
+  return block;
+}
+function rate(entry, value, label) {
+  try {
+    results = engine.rate(entry, value);
+  } catch (error) {
+    message(error.message);
+    return;
+  }
+  render();
+  message(value === null ? "Preference cleared." : "Preference saved.");
+  [...document.querySelectorAll(".rate")]
+    .find(
+      (button) =>
+        button.getAttribute("aria-label") ===
+        `${label}: ${entry.metadata.title}`,
+    )
+    ?.focus();
+}
 function render() {
   $("artwork").setAttribute("aria-checked", String(artwork));
   $("edition-count").textContent =
@@ -299,15 +371,19 @@ function render() {
     };
     $("navigation").append(button);
   }
-  workspace?.navigation(active, $("collection").value);
+  workspace?.navigation(active, $("collection").value, {
+    recommended: results.size,
+  });
   workspace?.mosaic($("collection").value);
   $("updates-toolbar").hidden = active !== "updates";
+  $("explore-toolbar").hidden = active !== "recommended";
   renderContinue();
   const query = $("search").value.toLowerCase().trim(),
     collection = $("collection").value;
   const visible = entries.filter(
     (e) =>
       (active === "all" ||
+        (active === "recommended" && results.has(e.metadata.id)) ||
         e.personal.status === active ||
         (active === "favorites" && e.personal.favorite) ||
         (active === "queue" && e.personal.queued) ||
@@ -322,17 +398,22 @@ function render() {
       : active === "favorites"
         ? "favorites"
         : "all";
-  const ordered = $("sort").value === "manual" || active === "queue";
+  const sortMode = active === "queue" ? "manual" : $("sort").value;
+  const ordered = sortMode === "manual";
   visible.sort((a, b) =>
-    ordered
-      ? (a.personal.orders?.[scope] ?? Infinity) -
-          (b.personal.orders?.[scope] ?? Infinity) ||
+    sortMode === "match"
+      ? (results.get(b.metadata.id)?.score ?? -Infinity) -
+          (results.get(a.metadata.id)?.score ?? -Infinity) ||
         b.personal.updatedAt - a.personal.updatedAt
-      : $("sort").value === "title"
-        ? a.metadata.title.localeCompare(b.metadata.title)
-        : $("sort").value === "pages"
-          ? (b.metadata.pageCount || 0) - (a.metadata.pageCount || 0)
-          : b.personal.updatedAt - a.personal.updatedAt,
+      : sortMode === "manual"
+        ? (a.personal.orders?.[scope] ?? Infinity) -
+            (b.personal.orders?.[scope] ?? Infinity) ||
+          b.personal.updatedAt - a.personal.updatedAt
+        : sortMode === "title"
+          ? a.metadata.title.localeCompare(b.metadata.title)
+          : sortMode === "pages"
+            ? (b.metadata.pageCount || 0) - (a.metadata.pageCount || 0)
+            : b.personal.updatedAt - a.personal.updatedAt,
   );
   async function move(from, to) {
     const urls = visible.map((e) => e.metadata.url);
@@ -348,9 +429,12 @@ function render() {
   }
   $("shelf-name").textContent =
     collection ||
-    { updates: "New pages", favorites: "Your favorites", queue: "Read next" }[
-      active
-    ] ||
+    {
+      recommended: "For you",
+      updates: "New pages",
+      favorites: "Your favorites",
+      queue: "Read next",
+    }[active] ||
     "The bookshelf";
   $("shelf-total").textContent = visible.length;
   $("shelf-description").textContent =
@@ -358,6 +442,7 @@ function render() {
       ? "Every story has a place."
       : labels[active] ||
         {
+          recommended: "Your shelf, ranked by the taste of your own reading.",
           updates: "Followed stories, fresh pages.",
           favorites: "The ones worth keeping.",
           queue: "Your next chapter, in your order.",
@@ -416,6 +501,7 @@ function render() {
       ),
       progress(entry),
     );
+    if (active === "recommended") body.append(why(entry));
     const footer = node("footer");
     if (newPages(entry)) {
       const read = node(
@@ -479,10 +565,25 @@ workspace = createWorkspace({
     active = mode;
     $("collection").value = collection;
     $("search").value = "";
-    if (mode === "queue" || collection) $("sort").value = "manual";
+    if (mode === "recommended") $("sort").value = "match";
+    else if (mode === "queue" || collection) $("sort").value = "manual";
     render();
   },
 });
+const explore = createExploreSlider({
+  document,
+  value: engine.explore(),
+  onChange(value) {
+    try {
+      results = engine.setExplore(value);
+    } catch (error) {
+      message(error.message);
+      return;
+    }
+    render();
+  },
+});
+$("explore").append(explore.element);
 $("collection").addEventListener("input", () => {
   if ($("collection").value) $("sort").value = "manual";
   render();
@@ -541,4 +642,6 @@ window.addEventListener("focus", () => {
   if (!document.querySelector(".editor[open]") && !$("title-drawer").open)
     refresh().catch((error) => message(error.message));
 });
+if (recommendationError)
+  message(`Saved preferences could not be read: ${recommendationError}`);
 refresh().catch((error) => message(error.message));

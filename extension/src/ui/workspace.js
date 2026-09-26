@@ -328,10 +328,11 @@ export function createWorkspace({
   $("check-updates").onclick = () =>
     checkUpdates().catch((e) => message(e.message));
   $("cancel-check").onclick = () => checking?.abort();
-  function navigation(active, collection) {
+  function navigation(active, collection, counts = {}) {
     const entries = getEntries();
     $("special-nav").replaceChildren();
     for (const [key, label, count] of [
+      ["recommended", "For you", counts.recommended ?? entries.length],
       ["updates", "Updates", entries.filter((e) => newPages(e) > 0).length],
       [
         "favorites",

@@ -55,11 +55,26 @@ Existing records migrate automatically to database version 2. Bookmarks, statuse
 
 Reload the unpacked extension, then reload the library and source tabs. Version 0.4.0 adds access to `https://multporn.net/*` so the library can fetch source metadata for the actions above. If the browser asks to approve that site access, enable it to use update checks and Refresh details. No other host access is requested.
 
+## Recommendations (0.5.0)
+
+**For you** is a special shelf in the sidebar that ranks your own library with the standalone `packages/local-recommender` package, now bundled into the library page.
+
+- **Signals.** Every saved title is a signal. Favorites count as likes; a finished title, or one you have started, is positive feedback; a **dropped** title counts as a dismissal and is left off the shelf. Nothing is inferred from the source website, and metadata such as the title or description is never scored.
+- **Tags.** Ranking is mostly tag driven, so a title's source tags are now read from its page and stored with the record when you use **Refresh details** or **Check for updates**. Titles saved before 0.5.0 carry no tags until you refresh them once; the metadata store is schemaless, so there is no migration to run, and a listing save never erases tags a refresh already found.
+- **Explicit feedback.** Each card on the shelf offers **More like this** and **Less like this**. The choice reranks the shelf immediately and is kept; choosing the active one again clears it so the inferred signals apply again.
+- **Explore.** The shelf's slider trades tag affinity for variety, and remembers where it was left.
+- **Storage.** Preferences live in this browser's `localStorage` under `folio:recommender`. Only the slider position and your explicit choices are stored; everything else is rebuilt from the library on every visit, so changing a status can never leave a stale weight behind.
+- **Backups.** Library records now export as format version 3, which adds tags. Versions 1 and 2 still import. Recommendation preferences stay on this browser and are not part of a backup, like the appearance settings.
+
+Known limits: the recommender's novelty bonus never applies here, because every candidate is itself a library title and therefore already a known tag — Explore works through its diversity penalty and affinity damping instead. Tag extraction reads the source page's `/category/` and `/tag/` links, preferring a `field-name-field-tags` block; if that markup changes, the shelf simply has less to work with, and no other page content is stored. Scores are relative ranking values within your own library, not grades or predictions.
+
 ## Architecture
 
 - `src/core/model.js`: validated records and versioned backup format.
 - `src/core/database.js`: IndexedDB schema migrations and atomic storage operations. The `personal` store owns reading state and collections; the separate `metadata` store owns observations from the source. Metadata refresh never overwrites personal data.
-- `src/adapters/multporn.js`: detail-page detection and continuous-reader image mapping.
+- `src/core/recommender.js`: the Folio side of the local recommender. Maps library records to ranking items, rebuilds the profile from the library plus the stored explicit choices, and owns the `folio:recommender` profile store.
+- `packages/local-recommender/`: the standalone, dependency-free ranking package. Bundled into `library.js`; it still knows nothing about Folio's models or database.
+- `src/adapters/multporn.js`: detail-page detection, source tag extraction, and continuous-reader image mapping.
 - `src/adapters/juicebox-bridge.js`: small MAIN-world bridge using the site's `window.jcgal` API. Supports only reading current/total pages and navigating to a bounded image index. It has no access to extension storage.
 - `src/adapters/reader.js`: isolated-world bridge client with validated responses and request timeouts.
 - `src/content.js`: isolated site companion, explicit bookmarks, and supported-reader progress.
@@ -69,7 +84,7 @@ Reload the unpacked extension, then reload the library and source tabs. Version 
 - `src/ui/update-checker.js`: same-host, timeout-bounded HTML fetches parsed into inert templates; redirects are rejected, and source scripts are not executed.
 - `src/ui/`: full-page library. All supplied titles and collection names are rendered as text.
 
-Schema version 1 creates both stores; version 2 migrates personal records and initializes known page-count baselines. Future schema migrations belong in `onupgradeneeded`; unknown future backup versions are rejected. Writes resolve after transaction commit. Concurrent record edits perform their read/modify/write in the same transaction.
+Schema version 1 creates both stores; version 2 migrates personal records and initializes known page-count baselines. Future schema migrations belong in `onupgradeneeded`; unknown future backup versions are rejected. Writes resolve after transaction commit. Concurrent record edits perform their read/modify/write in the same transaction. The database is still at version 2: tags are additive fields on existing metadata records, so nothing has to be migrated and older records gain them when they are next refreshed.
 
 The extension requests host access only to `https://multporn.net/*` for source metadata checks. It requests no tabs permission or access to other sites. Its declared content scripts run only on `https://multporn.net/*`. Cover artwork loads only when the optional artwork toggle is enabled. The library remains usable offline with typographic jackets.
 
@@ -80,7 +95,7 @@ npm run check
 BROWSER_PATH=/usr/bin/brave npm run test:browser
 ```
 
-The browser smoke tests also cover listing saves, notes and covers, update detection, cancellation/failures, queue and collection ordering, appearance, and privacy. The existing suites cover continuous readers, delayed Juicebox initialization, and the bookshelf UI (editing, progress, filters, optional covers, failed-image fallback, and responsive layout). The continuous-reader test loads the real built extension in a disposable profile, intercepts source requests with a non-explicit synthetic gallery, exercises saving/editing/reloading/resuming, and produces desktop/mobile screenshots in `test-results/`. It does not contact the live site. `BROWSER_PATH` can point to another compatible Chromium binary supporting unpacked extensions.
+The browser smoke tests also cover listing saves, notes and covers, update detection, cancellation/failures, queue and collection ordering, appearance, and privacy. The **For you** shelf has its own smoke test (`scripts/recommend-smoke.mjs`): it ranks a fixture library, checks the explanations and the dismissal filter, reranks through explicit feedback, and verifies that the feedback and the explore position survive a reload. The existing suites cover continuous readers, delayed Juicebox initialization, and the bookshelf UI (editing, progress, filters, optional covers, failed-image fallback, and responsive layout). The continuous-reader test loads the real built extension in a disposable profile, intercepts source requests with a non-explicit synthetic gallery, exercises saving/editing/reloading/resuming, and produces desktop/mobile screenshots in `test-results/`. It does not contact the live site. `BROWSER_PATH` can point to another compatible Chromium binary supporting unpacked extensions.
 
 On 2026-09-26, the live technical probe verified a 43-page Juicebox title: count/title repair, saved status/collection preservation, API resume, page-change persistence, and reopening. Image, media, font, and third-party requests were blocked during the probe; this verifies the reader API workflow, not artwork rendering or every site layout. Slideshow totals come from the API rather than rendered image elements.
 
@@ -88,4 +103,4 @@ Run the opt-in live probe with `npm run test:live`. It creates a disposable brow
 
 ## Scope and next steps
 
-This release covers discovery, personal organization, reading, and manual update checks. Legacy cache import, catalog ranking, custom reader controls, scheduled checking, automatic backup, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.
+This release covers discovery, personal organization, reading, manual update checks, and ranking your own library. Legacy cache import, catalog ranking (recommending titles you have not saved yet), custom reader controls, scheduled checking, automatic backup, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.

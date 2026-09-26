@@ -145,5 +145,20 @@ npm run test:recommender
 npm run check
 ```
 
-The module is not bundled into the extension or wired to an application screen.
-The existing extension build and storage schema are unchanged.
+The module is bundled into the Folio library page and drives its **For you** shelf
+through `extension/src/core/recommender.js`, which owns the record mapping, the
+profile rebuild, and the `folio:recommender` store. The package itself still imports
+none of the host's models, database, or UI.
+
+Mounting notes from that integration, useful for other hosts:
+
+- Ranking a library means every candidate is also a saved observation, so the
+  novelty term contributes nothing there; exploration then acts through the
+  diversity penalty and affinity damping. Novelty matters only when candidates
+  contain features absent from all training signals.
+- Only explicit choices and the slider position are worth persisting. Inferred
+  flags change on their own, so Folio keeps them out of the stored profile and
+  rebuilds them from the library on each visit.
+- Dismissals are hard filters at every slider position. A host that wants a
+  "show me everything" view must keep dismissed records out of the candidate list
+  it passes to `recommend`.

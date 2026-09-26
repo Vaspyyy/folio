@@ -107,6 +107,8 @@ export class Library {
         ...meta,
         author: meta.author || oldMeta?.author || "",
         description: meta.description || oldMeta?.description || "",
+        // Listing saves carry no tags; keep the ones a title-page refresh already found.
+        tags: meta.tags.length ? meta.tags : oldMeta?.tags || [],
         covers: meta.covers.length ? meta.covers : oldMeta?.covers || [],
         coverUrl: meta.coverUrl ?? oldMeta?.coverUrl ?? null,
         pageCount: meta.pageCount ?? oldMeta?.pageCount ?? null,
@@ -238,7 +240,7 @@ export class Library {
   async export() {
     return {
       format: "folio-library",
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       entries: await this.list(),
     };

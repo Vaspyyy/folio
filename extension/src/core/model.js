@@ -24,6 +24,19 @@ export function coverUrl(value) {
 }
 const shortText = (value, max = 1000) =>
   typeof value === "string" ? value.trim().slice(0, max) : "";
+// Source tags feed the local recommender; order and duplicates carry no meaning.
+const tagList = (value) =>
+  [
+    ...new Set(
+      (Array.isArray(value) ? value : [])
+        .map((tag) =>
+          typeof tag === "string"
+            ? tag.trim().replace(/\s+/g, " ").slice(0, 80)
+            : "",
+        )
+        .filter(Boolean),
+    ),
+  ].slice(0, 40);
 export function metadata(value) {
   const url = canonicalUrl(value.url);
   const title = String(value.title || "")
@@ -43,6 +56,7 @@ export function metadata(value) {
     coverUrl: coverUrl(value.coverUrl),
     author: shortText(value.author, 300),
     description: shortText(value.description, 6000),
+    tags: tagList(value.tags),
     covers: [
       ...new Set(
         (Array.isArray(value.covers) ? value.covers : [])
@@ -118,7 +132,7 @@ export function personal(value = {}) {
 export function validateBackup(data) {
   if (
     data?.format !== "folio-library" ||
-    ![1, 2].includes(data.version) ||
+    ![1, 2, 3].includes(data.version) ||
     !Array.isArray(data.entries) ||
     data.entries.length > 50000
   )

@@ -4,7 +4,11 @@ import "fake-indexeddb/auto";
 import { JSDOM } from "jsdom";
 import { Library, openDatabase } from "../src/core/database.js";
 import { canonicalUrl } from "../src/core/model.js";
-import { detectTitle, readingImages } from "../src/adapters/multporn.js";
+import {
+  detectTitle,
+  pageTags,
+  readingImages,
+} from "../src/adapters/multporn.js";
 const title = {
   url: "https://multporn.net/comics/fixture",
   title: "Fixture story",
@@ -278,4 +282,59 @@ test("personal extras, history, collection order and queue order survive backup"
     1,
   );
   assert.equal((await legacy.get(title.url)).personal.acknowledgedCount, 12);
+});
+test("source tags are read conservatively from a title page", () => {
+  const field = new JSDOM(
+    '<h1>Fixture</h1><div class="juicebox-container"></div><div class="field-name-field-tags"><a href="/category/Furry">Furry</a><a href="/category/furry">furry</a><a href="/tag/Deep_Space">Deep Space</a><a href="/comics/other-title">Another story</a><span class="field-item">Unlinked term</span></div>',
+  ).window.document;
+  assert.deepEqual(pageTags(field), ["Furry", "Deep Space", "Unlinked term"]);
+  assert.deepEqual(detectTitle(field, title.url).tags, [
+    "Furry",
+    "Deep Space",
+    "Unlinked term",
+  ]);
+  // Without the field wrapper only tag or category links count, never navigation.
+  const bare = new JSDOM(
+    '<h1>Fixture</h1><div class="juicebox-container"></div><nav><a href="/new">New</a><a href="/comics/other-title">Another story</a></nav><a href="/category/Old_Guard">Old Guard</a>',
+  ).window.document;
+  assert.deepEqual(pageTags(bare), ["Old Guard"]);
+  // A link with no usable text falls back to its own term.
+  const wordless = new JSDOM('<a href="/category/Deep_Space"></a>').window
+    .document;
+  assert.deepEqual(pageTags(wordless), ["Deep Space"]);
+  assert.deepEqual(pageTags(new JSDOM("<p>Nothing</p>").window.document), []);
+});
+test("tags are validated, capped, preserved on listing saves and included in backups", async () => {
+  const { metadata } = await import("../src/core/model.js");
+  const tags = Array.from({ length: 45 }, (_, i) => ` tag ${i} `);
+  assert.equal(metadata({ ...title, tags }).tags.length, 40);
+  assert.equal(metadata({ ...title, tags }).tags[0], "tag 0");
+  assert.deepEqual(
+    metadata({ ...title, tags: ["  Space  ", "Space", "", 7, "x".repeat(200)] })
+      .tags,
+    ["Space", "x".repeat(80)],
+  );
+  const db = await library();
+  await db.save({ ...title, tags: ["Furry", "Space"] });
+  await db.save(title); // A listing save carries no tags and must not erase them.
+  assert.deepEqual((await db.get(title.url)).metadata.tags, ["Furry", "Space"]);
+  const backup = await db.export();
+  assert.equal(backup.version, 3);
+  const other = await library();
+  await other.import(backup);
+  assert.deepEqual((await other.get(title.url)).metadata.tags, [
+    "Furry",
+    "Space",
+  ]);
+  const legacy = await library();
+  assert.equal(
+    await legacy.import({
+      ...backup,
+      version: 2,
+      entries: [{ metadata: { ...title }, personal: {} }],
+    }),
+    1,
+    "a version 2 backup without tags still imports",
+  );
+  assert.deepEqual((await legacy.get(title.url)).metadata.tags, []);
 });

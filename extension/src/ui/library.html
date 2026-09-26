@@ -132,6 +132,17 @@
             ><span id="update-status" role="status"></span>
             <ul id="update-errors"></ul>
           </div>
+          <div id="explore-toolbar" hidden>
+            <div>
+              <h3>Familiar, or further afield?</h3>
+              <p>
+                For you ranks your own shelf using what you save, favorite, and
+                read. Slide toward Explore for a more varied shelf instead of
+                your strongest matches.
+              </p>
+            </div>
+            <div id="explore"></div>
+          </div>
           <section class="filters" aria-label="Library filters">
             <label class="search-label"
               ><span class="sr-only">Find a title</span
@@ -148,6 +159,7 @@
             ><label
               ><span class="sr-only">Sort by</span
               ><select id="sort">
+                <option value="match">Best match</option>
                 <option value="manual">Shelf order</option>
                 <option value="recent" selected>Recently active</option>
                 <option value="title">Title A–Z</option>

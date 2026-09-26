@@ -14,6 +14,50 @@ export function cleanTitle(doc) {
   }
   return clone.textContent.replace(/\s+/g, " ").trim();
 }
+export function pageTags(root) {
+  // Source titles list taxonomy terms as /category/<term> links. Prefer the Drupal
+  // field wrapper; otherwise accept only explicit tag/category links so ordinary
+  // navigation is never mistaken for a taste signal.
+  const field = [
+    ...root.querySelectorAll(
+      ".field-name-field-tags a[href], .field-name-field-tags .field-item",
+    ),
+  ];
+  const nodes = field.length
+    ? field
+    : [...root.querySelectorAll('a[href*="/category/"], a[href*="/tag/"]')];
+  const tags = [];
+  for (const node of nodes) {
+    const href = node.getAttribute?.("href");
+    // A tag field must never swallow a link to another title.
+    if (isTitleLink(href)) continue;
+    const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+    const tag = (text || termFromHref(href)).slice(0, 80);
+    if (tag && !tags.some((value) => value.toLowerCase() === tag.toLowerCase()))
+      tags.push(tag);
+    if (tags.length >= 40) break;
+  }
+  return tags;
+}
+function isTitleLink(href) {
+  if (!href) return false;
+  try {
+    canonicalUrl(new URL(href, "https://multporn.net").href);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function termFromHref(href) {
+  if (!href) return "";
+  try {
+    const path = new URL(href, "https://multporn.net").pathname;
+    const match = /\/(?:category|tag)\/([^/]+)/.exec(path);
+    return match ? decodeURIComponent(match[1]).replace(/[_-]+/g, " ") : "";
+  } catch {
+    return "";
+  }
+}
 export function detectTitle(doc, href) {
   let url;
   try {
@@ -44,6 +88,7 @@ export function detectTitle(doc, href) {
     )
       .trim()
       .slice(0, 6000),
+    tags: pageTags(doc),
     covers: [
       ...new Set(
         [...gallery.querySelectorAll("img")]
