@@ -19,13 +19,11 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: git diff --check
+      - name: Install extension-capable Chromium
+        run: npx playwright install --with-deps chromium
       - name: Resolve Chromium
         shell: bash
         run: |
-          BROWSER_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
-          if [ -z "$BROWSER_PATH" ]; then
-            npx playwright install --with-deps chromium
-            BROWSER_PATH="$(node --input-type=module -e "import { chromium } from 'playwright'; console.log(chromium.executablePath())")"
-          fi
+          BROWSER_PATH="$(node --input-type=module -e "import { chromium } from 'playwright'; console.log(chromium.executablePath())")"
           echo "BROWSER_PATH=$BROWSER_PATH" >> "$GITHUB_ENV"
       - run: npm run test:browser
