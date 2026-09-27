@@ -39,6 +39,14 @@ export function record(item) {
   for (const key of ["saved", "liked", "dismissed"])
     if (item[key] !== undefined && typeof item[key] !== "boolean")
       throw new TypeError(`${key} must be boolean`);
+  if (
+    item.engagement !== undefined &&
+    (typeof item.engagement !== "number" ||
+      !Number.isFinite(item.engagement) ||
+      item.engagement < 0 ||
+      item.engagement > 1)
+  )
+    throw new TypeError("engagement must be a number between 0 and 1");
   return {
     id: item.id,
     tags: strings(item.tags ?? [], "tags"),
@@ -46,6 +54,7 @@ export function record(item) {
     saved: item.saved === true,
     liked: item.liked === true,
     dismissed: item.dismissed === true,
+    engagement: item.engagement ?? 0,
   };
 }
 
@@ -120,7 +129,11 @@ export function withExclusions(profile, rules) {
 }
 
 export function weight(observation) {
-  if (observation.dismissed) return -3;
-  if (observation.feedback !== null) return observation.feedback * 3;
-  return observation.liked ? 3 : observation.saved ? 1 : 0;
+  // Explicit choices are strongest. Favorites outrank inferred reading
+  // engagement, which in turn outranks the weak signal of merely saving.
+  if (observation.dismissed) return -4;
+  if (observation.feedback !== null) return observation.feedback * 4;
+  if (observation.liked) return 3;
+  if (observation.engagement > 0) return 1 + observation.engagement;
+  return observation.saved ? 1 : 0;
 }

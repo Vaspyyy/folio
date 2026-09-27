@@ -19,11 +19,14 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
           "open",
           "listingStatus",
           "saveListing",
+          "observeCatalog",
         ].includes(message.type)
       )
         throw new Error("Unsupported site action");
       if (
-        !["open", "listingStatus", "saveListing"].includes(message.type) &&
+        !["open", "listingStatus", "saveListing", "observeCatalog"].includes(
+          message.type,
+        ) &&
         canonicalUrl(message.url || message.metadata?.url) !==
           canonicalUrl(sender.url)
       )
@@ -35,6 +38,13 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     }
     const db = await library;
     switch (message.type) {
+      case "catalog":
+        return db.catalog(message.limit);
+      case "observeCatalog":
+        return db.observeCatalog(
+          message.items,
+          message.authoritative === true,
+        );
       case "listingStatus": {
         if (!Array.isArray(message.urls) || message.urls.length > 100)
           throw new Error("Invalid listing request");

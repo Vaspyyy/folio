@@ -4,7 +4,7 @@ self.onmessage = ({ data: { items, profile } }) => {
   try {
     self.postMessage({
       results: recommend(items, profile, {
-        includeSaved: true,
+        includeSaved: false,
         limit: items.length,
       }),
     });

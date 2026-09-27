@@ -1,22 +1,17 @@
-// Bridge between Folio's library records and the standalone local recommender.
-// This module owns the mapping and nothing else: ranking, profile shape, and
-// persistence validation all stay inside packages/local-recommender.
+// Bridge between Folio's personal library, passive source catalog and the
+// standalone local recommender. The package remains source-agnostic.
 import {
   createProfile,
   createProfileStore,
   recommend,
   withExplore,
+  withExclusions,
   withFeedback,
 } from "../../../packages/local-recommender/index.js";
 
 export const STORAGE_KEY = "folio:recommender";
-
-// The library UI imports both through this module so the package stays the only
-// place that knows how ranking works.
 export { createExploreSlider } from "../../../packages/local-recommender/slider.js";
 
-// Storage is optional: without a working localStorage the engine still ranks,
-// it just cannot remember the slider position or explicit feedback.
 const memory = () => {
   const data = new Map();
   return {
@@ -26,73 +21,113 @@ const memory = () => {
   };
 };
 
-// Reading a title to the end, or part-way, is a positive signal; dropping it is
-// a dismissal. Status flags stay authoritative — this only adds engagement.
+// Kept as a small exported helper for tests and host code. It is engagement,
+// not explicit preference feedback.
 export function inferredFeedback(personal) {
   if (personal.status === "finished") return 1;
   if (personal.status === "reading" && personal.page > 0) return 1;
   return null;
 }
 
-/** One library record as the recommender sees it. Metadata itself is never scored. */
+const authors = (value) =>
+  String(value || "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+
 export function signals(entry) {
+  const engagement = inferredFeedback(entry.personal);
   return {
     item: {
       id: entry.metadata.id,
       title: entry.metadata.title,
       tags: entry.metadata.tags || [],
-      authors: String(entry.metadata.author || "")
-        .split(",")
-        .map((name) => name.trim())
-        .filter(Boolean),
+      authors: authors(entry.metadata.author),
       saved: true,
       liked: entry.personal.favorite === true,
       dismissed: entry.personal.status === "dropped",
+      engagement: engagement ?? 0,
     },
-    feedback: inferredFeedback(entry.personal),
+    feedback: engagement,
   };
 }
 
-/**
- * Ranks the current library. Inferred signals are recomputed from the library on
- * every update; only the explore position and explicit choices are persisted, so
- * a title that changes status never keeps a stale inferred weight.
- */
+export function candidateItem(metadata) {
+  return {
+    id: metadata.id,
+    title: metadata.title,
+    tags: metadata.tags || [],
+    authors: authors(metadata.author),
+    saved: false,
+    liked: false,
+    dismissed: false,
+    engagement: 0,
+  };
+}
+
+function explicitOnly(profile) {
+  // Saved/dismissed are current application state, not permanent explicit
+  // preference. Persist only the feature snapshot plus feedback.
+  return {
+    ...profile,
+    observations: profile.observations.map((observation) => ({
+      ...observation,
+      saved: false,
+      liked: false,
+      dismissed: false,
+      engagement: 0,
+    })),
+  };
+}
+
 export function createRecommendationEngine({
   storage,
   key = STORAGE_KEY,
   rank = (items, profile) =>
-    recommend(items, profile, { includeSaved: true, limit: items.length }),
+    recommend(items, profile, { includeSaved: false, limit: items.length }),
 } = {}) {
   const store = createProfileStore(storage || memory(), key);
-  let entries = [];
-  let explicit = store.load();
+  let library = [];
+  let catalog = [];
+  let explicit = explicitOnly(store.load());
   let results = new Map();
   let revision = 0;
+
+  function buildProfile() {
+    const current = createProfile(
+      library.map((entry) => signals(entry).item),
+      {
+        explore: explicit.explore,
+        exclusions: explicit.exclusions,
+      },
+    );
+    const byId = new Map(
+      current.observations.map((observation) => [observation.id, observation]),
+    );
+    for (const choice of explicit.observations) {
+      const observation = byId.get(choice.id);
+      byId.set(choice.id, {
+        ...(observation || choice),
+        feedback: choice.feedback,
+      });
+    }
+    return {
+      ...current,
+      observations: [...byId.values()],
+    };
+  }
+
+  function candidatePool() {
+    const saved = new Set(library.map((entry) => entry.metadata.id));
+    return catalog
+      .filter((metadata) => metadata?.id && !saved.has(metadata.id))
+      .map(candidateItem);
+  }
+
   function rebuild() {
-    const current = ++revision;
-    const mapped = entries.map(signals);
-    const chosen = new Map(
-      explicit.observations.map((observation) => [
-        observation.id,
-        observation.feedback,
-      ]),
-    );
-    const profile = createProfile(
-      mapped.map((entry) => entry.item),
-      { explore: explicit.explore },
-    );
-    const inferred = new Map(
-      mapped.map(({ item, feedback }) => [item.id, feedback]),
-    );
-    // Apply snapshots in one pass instead of revalidating and copying the whole
-    // profile for every engaged title. The ranker validates the final profile.
-    profile.observations = profile.observations.map((observation) => ({
-      ...observation,
-      feedback: chosen.has(observation.id)
-        ? chosen.get(observation.id)
-        : inferred.get(observation.id),
-    }));
+    const currentRevision = ++revision;
+    const items = candidatePool();
+    const profile = buildProfile();
     const finish = (ranked) => {
       const next = new Map(
         ranked.map(({ item, score, explanations }) => [
@@ -100,19 +135,22 @@ export function createRecommendationEngine({
           { score, explanations },
         ]),
       );
-      if (current === revision) results = next;
+      if (currentRevision === revision) results = next;
       return next;
     };
-    const ranked = rank(
-      mapped.map((entry) => entry.item),
-      profile,
-    );
+    const ranked = rank(items, profile);
     return ranked instanceof Promise ? ranked.then(finish) : finish(ranked);
   }
+
+  const persist = (next) => {
+    explicit = explicitOnly(store.save(explicitOnly(next)));
+    return explicit;
+  };
+
   return {
-    /** Rebuild the profile and the ranking for the supplied library records. */
-    update(next) {
-      entries = (next || []).filter((entry) => entry?.metadata?.id);
+    update(nextLibrary, nextCatalog = []) {
+      library = (nextLibrary || []).filter((entry) => entry?.metadata?.id);
+      catalog = (nextCatalog || []).filter((entry) => entry?.id);
       return rebuild();
     },
     results: () => results,
@@ -120,23 +158,46 @@ export function createRecommendationEngine({
       explicit.observations.find((observation) => observation.id === id)
         ?.feedback ?? null,
     explore: () => explicit.explore,
+    isDismissed: (id) => explicit.exclusions.ids.includes(id),
     setExplore(value) {
-      explicit = store.save(withExplore(explicit, value));
+      persist(withExplore(explicit, value));
       return rebuild();
     },
-    /** value is 1, -1, or null to drop the explicit choice and restore inference. */
-    rate(entry, value) {
-      if (value === null)
-        explicit = store.save({
+    rate(value, feedback) {
+      const item = value?.metadata
+        ? value.personal
+          ? signals(value).item
+          : candidateItem(value.metadata)
+        : candidateItem(value);
+      if (feedback === null) {
+        persist({
           ...explicit,
           observations: explicit.observations.filter(
-            (observation) => observation.id !== entry.metadata.id,
+            (observation) => observation.id !== item.id,
           ),
         });
-      else
-        explicit = store.save(
-          withFeedback(explicit, signals(entry).item, value),
-        );
+      } else {
+        persist(withFeedback(explicit, item, feedback));
+      }
+      return rebuild();
+    },
+    dismiss(id) {
+      const ids = [...new Set([...explicit.exclusions.ids, id])];
+      persist(
+        withExclusions(explicit, {
+          ...explicit.exclusions,
+          ids,
+        }),
+      );
+      return rebuild();
+    },
+    restore(id) {
+      persist(
+        withExclusions(explicit, {
+          ...explicit.exclusions,
+          ids: explicit.exclusions.ids.filter((value) => value !== id),
+        }),
+      );
       return rebuild();
     },
   };
