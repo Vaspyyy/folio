@@ -205,7 +205,8 @@ test("v1 database migration preserves records and initializes update baselines",
   });
   const db = new Library(await openDatabase(name));
   const entry = await db.get(title.url);
-  assert.equal(db.db.version, 2);
+  assert.equal(db.db.version, 3);
+  assert.equal(db.db.objectStoreNames.contains("catalog"), true);
   assert.equal(entry.personal.acknowledgedCount, 12);
   assert.equal(entry.personal.status, "finished");
   assert.equal(entry.personal.updatedAt, 123);
