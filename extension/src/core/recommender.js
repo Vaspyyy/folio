@@ -104,10 +104,16 @@ export function createRecommendationEngine({
     const byId = new Map(
       current.observations.map((observation) => [observation.id, observation]),
     );
+    const candidateSnapshots = new Map(
+      catalog.map((metadata) => [metadata.id, candidateItem(metadata)]),
+    );
     for (const choice of explicit.observations) {
-      const observation = byId.get(choice.id);
+      // Refresh the stored feature snapshot from current library/catalog
+      // metadata when possible, but keep the explicit feedback itself.
+      const snapshot =
+        byId.get(choice.id) || candidateSnapshots.get(choice.id) || choice;
       byId.set(choice.id, {
-        ...(observation || choice),
+        ...snapshot,
         feedback: choice.feedback,
       });
     }

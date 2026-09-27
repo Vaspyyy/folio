@@ -74,8 +74,8 @@ document.body.append(slider.element);
 
 Items require unique, nonempty string `id` and string `title`. `authors` and `tags`
 default to empty arrays; `saved`, `liked`, and `dismissed` default to false. Optional
-`engagement` is a number from 0 through 1 for inferred host activity such as reading. Optional
-`metadata` is returned unchanged with the original item. Tags/authors are trimmed,
+`engagement` is a number from 0 through 1 for inferred host activity such as reading.
+Optional `metadata` is returned unchanged with the original item. Tags/authors are trimmed,
 Unicode NFKC normalized, lowercased, deduplicated, and sorted. IDs remain exact and
 case-sensitive. Unknown vocabulary is valid; no synonyms or domain assumptions exist.
 
