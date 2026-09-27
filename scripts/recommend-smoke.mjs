@@ -95,7 +95,7 @@ try {
   const forYou = page.getByRole("button", { name: /For you/ });
   assert.match(await forYou.innerText(), /For you\s*3/);
   await forYou.click();
-  await page.getByText("The Quiet Hours", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "The Quiet Hours", exact: true }).waitFor();
   const titles = () => page.locator(".card .title-button").allInnerTexts();
   assert.deepEqual(await titles(), [
     "The Quiet Hours",
