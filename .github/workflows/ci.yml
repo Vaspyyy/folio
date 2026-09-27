@@ -9,7 +9,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,3 +18,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npx prettier --check extension/src extension/tests scripts packages/local-recommender
+      - run: git diff --check
+      - name: Resolve Chromium
+        shell: bash
+        run: |
+          BROWSER_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$BROWSER_PATH" ]; then
+            npx playwright install --with-deps chromium
+            BROWSER_PATH="$(node --input-type=module -e "import { chromium } from 'playwright'; console.log(chromium.executablePath())")"
+          fi
+          echo "BROWSER_PATH=$BROWSER_PATH" >> "$GITHUB_ENV"
+      - run: npm run test:browser
