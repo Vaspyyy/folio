@@ -133,7 +133,10 @@ The host should show failures and decide recovery. Storage is local, unencrypted
 last-writer-wins across tabs; cross-tab merging is the host's responsibility.
 
 The algorithm targets modest local collections. Pair learning is quadratic in tags per
-item; greedy diversity selection grows with candidate count and requested result count.
+item; greedy diversity selection caches each candidate’s maximum similarity and
+compares only the newest selection on each iteration. It performs O(N × K)
+similarity comparisons for N candidates and K requested results, plus sorting.
+Hosts with large collections should run ranking in a worker.
 No model downloads, dependencies, clocks, or random seeds are needed by the runtime.
 The slider uses a native, labeled, keyboard-accessible range input, with an output and
 accessible value text; style its returned `element` in the host UI.

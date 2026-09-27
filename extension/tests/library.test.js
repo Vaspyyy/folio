@@ -293,17 +293,42 @@ test("source tags are read conservatively from a title page", () => {
     "Deep Space",
     "Unlinked term",
   ]);
-  // Without the field wrapper only tag or category links count, never navigation.
+  // Without a recognized field, taxonomy links are not title metadata.
   const bare = new JSDOM(
     '<h1>Fixture</h1><div class="juicebox-container"></div><nav><a href="/new">New</a><a href="/comics/other-title">Another story</a></nav><a href="/category/Old_Guard">Old Guard</a>',
   ).window.document;
-  assert.deepEqual(pageTags(bare), ["Old Guard"]);
+  assert.deepEqual(pageTags(bare), []);
   // A link with no usable text falls back to its own term.
-  const wordless = new JSDOM('<a href="/category/Deep_Space"></a>').window
-    .document;
+  const wordless = new JSDOM(
+    '<div class="field-name-field-tags"><a href="/category/Deep_Space"></a></div>',
+  ).window.document;
   assert.deepEqual(pageTags(wordless), ["Deep Space"]);
   assert.deepEqual(pageTags(new JSDOM("<p>Nothing</p>").window.document), []);
 });
+test("tag metadata excludes navigation, related content, and title-link wrappers", () => {
+  const doc = new JSDOM(`
+    <nav><a href="/category/fantasy">Fantasy</a></nav>
+    <aside class="field-name-field-tags"><a href="/category/mystery">Mystery</a></aside>
+    <article><h1>Programming Essentials</h1><div class="juicebox-container"></div>
+      <div class="field-name-field-tags">
+        <div class="field-item"><a href="/comics/unrelated">Unrelated Title</a></div>
+        <div class="field-item"><a href="/category/science">Science</a></div>
+        <div class="field-item"><a href="https://other.example/category/false">External</a></div>
+        <a href="/search?next=/category/wrong">Search</a>
+        <div class="field-item"><a href="/category/%ZZ">Malformed</a></div>
+        <span class="field-item">Education</span>
+      </div>
+      <div class="related"><div class="field-name-field-tags"><a href="/category/romance">Romance</a></div></div>
+    </article>
+    <article><div class="field-name-field-tags"><a href="/category/history">History</a></div></article>
+  `).window.document;
+  assert.deepEqual(pageTags(doc), ["Science", "Education"]);
+  const unknown = new JSDOM(
+    '<nav><a href="/category/fantasy">Fantasy</a><a href="/category/mystery">Mystery</a></nav><article><h1>Programming Essentials</h1></article>',
+  ).window.document;
+  assert.deepEqual(pageTags(unknown), []);
+});
+
 test("tags are validated, capped, preserved on listing saves and included in backups", async () => {
   const { metadata } = await import("../src/core/model.js");
   const tags = Array.from({ length: 45 }, (_, i) => ` tag ${i} `);

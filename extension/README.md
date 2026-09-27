@@ -57,7 +57,7 @@ Reload the unpacked extension, then reload the library and source tabs. Version 
 
 ## Recommendations (0.5.0)
 
-**For you** is a special shelf in the sidebar that ranks your own library with the standalone `packages/local-recommender` package, now bundled into the library page.
+**For you** is a special shelf in the sidebar that ranks your own library with the standalone `packages/local-recommender` package, with ranking computed in a dedicated background worker.
 
 - **Signals.** Every saved title is a signal. Favorites count as likes; a finished title, or one you have started, is positive feedback; a **dropped** title counts as a dismissal and is left off the shelf. Nothing is inferred from the source website, and metadata such as the title or description is never scored.
 - **Tags.** Ranking is mostly tag driven, so a title's source tags are now read from its page and stored with the record when you use **Refresh details** or **Check for updates**. Titles saved before 0.5.0 carry no tags until you refresh them once; the metadata store is schemaless, so there is no migration to run, and a listing save never erases tags a refresh already found.
@@ -66,14 +66,14 @@ Reload the unpacked extension, then reload the library and source tabs. Version 
 - **Storage.** Preferences live in this browser's `localStorage` under `folio:recommender`. Only the slider position and your explicit choices are stored; everything else is rebuilt from the library on every visit, so changing a status can never leave a stale weight behind.
 - **Backups.** Library records now export as format version 3, which adds tags. Versions 1 and 2 still import. Recommendation preferences stay on this browser and are not part of a backup, like the appearance settings.
 
-Known limits: the recommender's novelty bonus never applies here, because every candidate is itself a library title and therefore already a known tag — Explore works through its diversity penalty and affinity damping instead. Tag extraction reads the source page's `/category/` and `/tag/` links, preferring a `field-name-field-tags` block; if that markup changes, the shelf simply has less to work with, and no other page content is stored. Scores are relative ranking values within your own library, not grades or predictions.
+Known limits: the recommender's novelty bonus never applies here, because every candidate is itself a library title and therefore already a known tag — Explore works through its diversity penalty and affinity damping instead. Tag extraction reads validated `/category/` and `/tag/` links only inside explicit `field-name-field-tags` blocks; if that markup changes, the shelf simply has less to work with, and no other page content is stored. Scores are relative ranking values within your own library, not grades or predictions.
 
 ## Architecture
 
 - `src/core/model.js`: validated records and versioned backup format.
 - `src/core/database.js`: IndexedDB schema migrations and atomic storage operations. The `personal` store owns reading state and collections; the separate `metadata` store owns observations from the source. Metadata refresh never overwrites personal data.
 - `src/core/recommender.js`: the Folio side of the local recommender. Maps library records to ranking items, rebuilds the profile from the library plus the stored explicit choices, and owns the `folio:recommender` profile store.
-- `packages/local-recommender/`: the standalone, dependency-free ranking package. Bundled into `library.js`; it still knows nothing about Folio's models or database.
+- `packages/local-recommender/`: the standalone, dependency-free ranking package. Used by `ranking-worker.js`; it still knows nothing about Folio's models or database.
 - `src/adapters/multporn.js`: detail-page detection, source tag extraction, and continuous-reader image mapping.
 - `src/adapters/juicebox-bridge.js`: small MAIN-world bridge using the site's `window.jcgal` API. Supports only reading current/total pages and navigating to a bounded image index. It has no access to extension storage.
 - `src/adapters/reader.js`: isolated-world bridge client with validated responses and request timeouts.
@@ -104,3 +104,15 @@ Run the opt-in live probe with `npm run test:live`. It creates a disposable brow
 ## Scope and next steps
 
 This release covers discovery, personal organization, reading, manual update checks, and ranking your own library. Legacy cache import, catalog ranking (recommending titles you have not saved yet), custom reader controls, scheduled checking, automatic backup, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.
+
+### Ranking responsiveness and tag boundaries
+
+Ranking runs in a module worker, so library rendering and editing do not wait for
+it. New requests terminate obsolete workers, and stale responses cannot replace
+newer results. Diversity selection caches the maximum similarity to previous picks
+instead of rescanning the whole prefix. Engagement feedback is applied in one pass.
+
+Tag extraction accepts only explicit `field-name-field-tags` fields in the current
+title container when available. Navigation, sidebars, related listings, external
+links, and wrappers around title links are excluded. Pages without a recognized
+field yield no tags; live markup compatibility remains unverified.

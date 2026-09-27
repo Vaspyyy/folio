@@ -6,6 +6,7 @@ await build({
   entryPoints: {
     background: "extension/src/background.js",
     library: "extension/src/ui/library.js",
+    "ranking-worker": "extension/src/ui/ranking-worker.js",
   },
   bundle: true,
   format: "esm",

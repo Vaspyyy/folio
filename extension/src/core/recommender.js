@@ -61,12 +61,16 @@ export function signals(entry) {
 export function createRecommendationEngine({
   storage,
   key = STORAGE_KEY,
+  rank = (items, profile) =>
+    recommend(items, profile, { includeSaved: true, limit: items.length }),
 } = {}) {
   const store = createProfileStore(storage || memory(), key);
   let entries = [];
   let explicit = store.load();
   let results = new Map();
+  let revision = 0;
   function rebuild() {
+    const current = ++revision;
     const mapped = entries.map(signals);
     const chosen = new Map(
       explicit.observations.map((observation) => [
@@ -74,25 +78,36 @@ export function createRecommendationEngine({
         observation.feedback,
       ]),
     );
-    let profile = createProfile(
+    const profile = createProfile(
       mapped.map((entry) => entry.item),
       { explore: explicit.explore },
     );
-    for (const { item, feedback } of mapped) {
-      const value = chosen.has(item.id) ? chosen.get(item.id) : feedback;
-      if (value !== null) profile = withFeedback(profile, item, value);
-    }
-    results = new Map(
-      recommend(
-        mapped.map((entry) => entry.item),
-        profile,
-        { includeSaved: true, limit: mapped.length },
-      ).map(({ item, score, explanations }) => [
-        item.id,
-        { score, explanations },
-      ]),
+    const inferred = new Map(
+      mapped.map(({ item, feedback }) => [item.id, feedback]),
     );
-    return results;
+    // Apply snapshots in one pass instead of revalidating and copying the whole
+    // profile for every engaged title. The ranker validates the final profile.
+    profile.observations = profile.observations.map((observation) => ({
+      ...observation,
+      feedback: chosen.has(observation.id)
+        ? chosen.get(observation.id)
+        : inferred.get(observation.id),
+    }));
+    const finish = (ranked) => {
+      const next = new Map(
+        ranked.map(({ item, score, explanations }) => [
+          item.id,
+          { score, explanations },
+        ]),
+      );
+      if (current === revision) results = next;
+      return next;
+    };
+    const ranked = rank(
+      mapped.map((entry) => entry.item),
+      profile,
+    );
+    return ranked instanceof Promise ? ranked.then(finish) : finish(ranked);
   }
   return {
     /** Rebuild the profile and the ranking for the supplied library records. */

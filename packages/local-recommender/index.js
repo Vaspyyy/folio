@@ -181,23 +181,24 @@ export function recommend(items, profile, options = {}) {
     pool.push({ item, normalized, details, components });
   }
   // Greedy maximum-marginal-relevance selection. Tie-breaking is locale-independent.
-  const selected = [];
+  let lastSelected;
   const result = [];
   while (pool.length && result.length < limit) {
     for (const candidate of pool) {
-      candidate.components.diversityPenalty =
-        0.45 *
-        explore *
-        Math.max(
-          0,
-          ...selected.map((other) => similarity(candidate.normalized, other)),
-        );
+      // Earlier similarities have already been considered. Only the newest
+      // selection can increase this maximum; do not rescan the entire prefix.
+      candidate.components.diversityPenalty = Math.max(
+        candidate.components.diversityPenalty ?? 0,
+        lastSelected && explore > 0
+          ? 0.45 * explore * similarity(candidate.normalized, lastSelected)
+          : 0,
+      );
       candidate.score =
         candidate.components.baseScore - candidate.components.diversityPenalty;
     }
     pool.sort((a, b) => b.score - a.score || compare(a.item.id, b.item.id));
     const winner = pool.shift();
-    selected.push(winner.normalized);
+    lastSelected = winner.normalized;
     result.push({
       item: winner.item,
       score: winner.score,

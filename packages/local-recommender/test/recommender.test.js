@@ -406,3 +406,47 @@ test("slider emits normalized values, updates accessible labels, persists, and c
   assert.equal(document.querySelector("main").children.length, 0);
   dom.window.close();
 });
+
+test("incremental diversity matches a full-prefix reference scan", () => {
+  const items = Array.from({ length: 36 }, (_, i) =>
+    book(`book-${i}`, ["fiction", `genre-${i % 7}`, `topic-${i % 5}`], {
+      authors: [`Author ${i % 4}`],
+    }),
+  );
+  const profile = createProfile([
+    { ...seed, tags: ["fiction", "genre-1"], liked: true },
+  ]);
+  const jaccard = (a, b) =>
+    a.filter((v) => b.includes(v)).length / new Set([...a, ...b]).size;
+  for (const explore of [0, 0.25, 0.9, 1]) {
+    const pool = items.map((item) => ({
+      item,
+      base: recommend([item], profile, { explore })[0].components.baseScore,
+    }));
+    const expected = [];
+    while (pool.length) {
+      for (const candidate of pool) {
+        const max = Math.max(
+          0,
+          ...expected.map(
+            ({ item }) =>
+              0.8 * jaccard(candidate.item.tags, item.tags) +
+              0.2 * jaccard(candidate.item.authors, item.authors),
+          ),
+        );
+        candidate.score = candidate.base - 0.45 * explore * max;
+      }
+      pool.sort(
+        (a, b) => b.score - a.score || (a.item.id < b.item.id ? -1 : 1),
+      );
+      expected.push(pool.shift());
+    }
+    const actual = recommend(items, profile, { explore, limit: items.length });
+    assert.deepEqual(
+      ids(actual),
+      expected.map(({ item }) => item.id),
+    );
+    for (let i = 0; i < actual.length; i++)
+      assert.ok(Math.abs(actual[i].score - expected[i].score) < 1e-12);
+  }
+});

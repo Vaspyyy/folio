@@ -6,6 +6,7 @@ import {
 } from "../core/recommender.js";
 import { readingProgress, continueReading } from "./presentation.js";
 import { createWorkspace } from "./workspace.js";
+import { createWorkerRanker } from "./ranking-client.js";
 let workspace;
 const $ = (id) => document.getElementById(id);
 const labels = {
@@ -29,13 +30,16 @@ const storage = () => {
   }
 };
 let engine, recommendationError;
+const rank = createWorkerRanker();
+let rankingRevision = 0,
+  rankingPending = false;
 try {
-  engine = createRecommendationEngine({ storage: storage() });
+  engine = createRecommendationEngine({ storage: storage(), rank });
 } catch (error) {
   // A corrupt saved profile must not take the library down: ranking continues
   // from the current library alone and the failure is reported on load.
   recommendationError = error.message;
-  engine = createRecommendationEngine();
+  engine = createRecommendationEngine({ rank });
 }
 try {
   artwork = localStorage.getItem("folio:artwork") === "true";
@@ -152,7 +156,6 @@ async function refresh() {
   const data = await request("list");
   if (version !== refreshVersion) return;
   entries = data;
-  results = engine.update(entries);
   const selected = $("collection").value;
   $("collection").replaceChildren(new Option("All collections", ""));
   const names = [
@@ -161,6 +164,29 @@ async function refresh() {
   for (const name of names) $("collection").add(new Option(name, name));
   $("collection").value = names.includes(selected) ? selected : "";
   render();
+  await rerank(() => engine.update(entries));
+}
+async function rerank(action) {
+  const revision = ++rankingRevision;
+  rankingPending = true;
+  $("ranking-status").textContent = "Updating your shelf…";
+  try {
+    const next = await action();
+    if (revision !== rankingRevision) return false;
+    results = next;
+    return true;
+  } catch (error) {
+    if (revision === rankingRevision && error.name !== "AbortError")
+      message(error.message);
+    return false;
+  } finally {
+    if (revision === rankingRevision) {
+      rankingPending = false;
+      $("ranking-status").textContent = "";
+      // Do not replace forms on ordinary shelves when background work finishes.
+      if (active === "recommended" || $("sort").value === "match") render();
+    }
+  }
 }
 function editor(entry) {
   const { metadata: m, personal: p } = entry;
@@ -330,14 +356,8 @@ function why(entry) {
   block.append(controls);
   return block;
 }
-function rate(entry, value, label) {
-  try {
-    results = engine.rate(entry, value);
-  } catch (error) {
-    message(error.message);
-    return;
-  }
-  render();
+async function rate(entry, value, label) {
+  if (!(await rerank(() => engine.rate(entry, value)))) return;
   message(value === null ? "Preference cleared." : "Preference saved.");
   [...document.querySelectorAll(".rate")]
     .find(
@@ -372,7 +392,8 @@ function render() {
     $("navigation").append(button);
   }
   workspace?.navigation(active, $("collection").value, {
-    recommended: results.size,
+    recommended: entries.filter((entry) => entry.personal.status !== "dropped")
+      .length,
   });
   workspace?.mosaic($("collection").value);
   $("updates-toolbar").hidden = active !== "updates";
@@ -452,7 +473,10 @@ function render() {
   $("clear-filters").hidden = !query && !collection && active === "all";
   $("entries").replaceChildren();
   $("empty").hidden = entries.length > 0;
-  $("no-results").hidden = !entries.length || visible.length > 0;
+  $("no-results").hidden =
+    !entries.length ||
+    visible.length > 0 ||
+    (active === "recommended" && rankingPending);
   for (const [index, entry] of visible.entries()) {
     const { metadata: m, personal: p } = entry,
       card = node("article", undefined, "card");
@@ -574,13 +598,7 @@ const explore = createExploreSlider({
   document,
   value: engine.explore(),
   onChange(value) {
-    try {
-      results = engine.setExplore(value);
-    } catch (error) {
-      message(error.message);
-      return;
-    }
-    render();
+    rerank(() => engine.setExplore(value));
   },
 });
 $("explore").append(explore.element);

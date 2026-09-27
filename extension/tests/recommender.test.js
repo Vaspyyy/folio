@@ -246,3 +246,41 @@ test("records without usable metadata are skipped", () => {
     [url("a")],
   );
 });
+
+test("async ranking cannot replace newer results with an obsolete response", async () => {
+  const jobs = [];
+  const engine = createRecommendationEngine({
+    rank: (items, profile) =>
+      new Promise((resolve) => jobs.push({ items, profile, resolve })),
+  });
+  const old = engine.update([entry("old", ["fiction"])]);
+  const latest = engine.update([
+    entry("new", ["fantasy"], { status: "finished" }),
+  ]);
+  assert.equal(jobs[1].profile.observations[0].feedback, 1);
+  jobs[1].resolve([
+    { item: jobs[1].items[0], score: 1, explanations: ["New"] },
+  ]);
+  await latest;
+  jobs[0].resolve([
+    { item: jobs[0].items[0], score: 0, explanations: ["Old"] },
+  ]);
+  await old;
+  assert.deepEqual([...engine.results().keys()], [url("new")]);
+});
+
+test("600 engaged titles rank within a generous interactive budget", () => {
+  const entries = Array.from({ length: 600 }, (_, i) =>
+    entry(`book-${i}`, ["fiction", `genre-${i % 12}`, `topic-${i % 25}`], {
+      status: "finished",
+      author: `Author ${i % 40}`,
+    }),
+  );
+  const engine = createRecommendationEngine();
+  const start = performance.now();
+  assert.equal(engine.update(entries).size, 600);
+  assert.ok(
+    performance.now() - start < 2000,
+    "600 titles should take under 2s; the previous cubic scan took ~10s",
+  );
+});

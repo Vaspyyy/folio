@@ -153,6 +153,59 @@ try {
     "Beyond the Blue",
     "The Quiet Hours",
   ]);
+  // Import a larger local fixture, then confirm ranking runs in a worker while
+  // the UI remains usable. Every candidate is synthetic; nothing is fetched.
+  await page.evaluate(async () => {
+    const response = await chrome.runtime.sendMessage({
+      type: "import",
+      data: {
+        format: "folio-library",
+        version: 3,
+        entries: Array.from({ length: 600 }, (_, i) => ({
+          metadata: {
+            url: `https://multporn.net/comics/scale-fixture-${i}`,
+            title: `Science Book ${i}`,
+            tags: ["fiction", `genre-${i % 12}`, `topic-${i % 25}`],
+            author: `Author ${i % 40}`,
+          },
+          personal: { status: "finished", page: 20 },
+        })),
+      },
+    });
+    if (!response.ok) throw new Error(response.error);
+  });
+  await page.reload();
+  await page.locator(".card").first().waitFor();
+  await page.getByRole("button", { name: /For you/ }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll(".card").length === 603 &&
+      document.querySelector("#ranking-status").textContent === "",
+  );
+  const workerCreated = page.waitForEvent("worker");
+  const responsiveness = await page.evaluate(async () => {
+    const input = document.querySelector("#explore input");
+    const start = performance.now();
+    for (const value of [10, 50, 95]) {
+      input.value = String(value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return performance.now() - start;
+  });
+  await workerCreated;
+  assert.ok(
+    responsiveness < 1000,
+    `Slider input blocked the UI for ${responsiveness}ms`,
+  );
+  await page.waitForFunction(
+    () => document.querySelector("#ranking-status").textContent === "",
+  );
+  assert.equal(await explore.inputValue(), "95");
+  assert.equal(await page.locator(".card").count(), 603);
+  console.log(
+    `PASS: 600-item fixture, worker ranking, rapid slider cancellation; UI yielded in ${Math.round(responsiveness)}ms.`,
+  );
   assert.deepEqual(errors, []);
   console.log(
     "PASS: For you ranks the library, explains positions, persists feedback and the explore position; dismissed titles stay out; no page errors.",

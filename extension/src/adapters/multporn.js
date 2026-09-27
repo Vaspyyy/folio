@@ -15,22 +15,24 @@ export function cleanTitle(doc) {
   return clone.textContent.replace(/\s+/g, " ").trim();
 }
 export function pageTags(root) {
-  // Source titles list taxonomy terms as /category/<term> links. Prefer the Drupal
-  // field wrapper; otherwise accept only explicit tag/category links so ordinary
-  // navigation is never mistaken for a taste signal.
-  const field = [
-    ...root.querySelectorAll(
-      ".field-name-field-tags a[href], .field-name-field-tags .field-item",
-    ),
-  ];
-  const nodes = field.length
-    ? field
-    : [...root.querySelectorAll('a[href*="/category/"], a[href*="/tag/"]')];
+  // Only explicit title tag fields are evidence. Global category navigation,
+  // related listings, and linked titles must not become this title's metadata.
+  const gallery = root.querySelector(
+    ".juicebox-container, #juicebox-container, .pages--full",
+  );
+  const scope = gallery?.closest("article, .node") || root;
+  const nodes = scope.querySelectorAll(
+    ".field-name-field-tags a[href], .field-name-field-tags .field-item",
+  );
   const tags = [];
   for (const node of nodes) {
-    const href = node.getAttribute?.("href");
-    // A tag field must never swallow a link to another title.
-    if (isTitleLink(href)) continue;
+    if (node.closest("nav, aside, footer, .view, .related, .related-content"))
+      continue;
+    // Inspect anchors themselves, never a wrapper's combined link text.
+    if (node.matches(".field-item") && node.querySelector("a, .field-item"))
+      continue;
+    const href = node.getAttribute("href");
+    if (node.matches("a") && !termFromHref(href)) continue;
     const text = (node.textContent || "").replace(/\s+/g, " ").trim();
     const tag = (text || termFromHref(href)).slice(0, 80);
     if (tag && !tags.some((value) => value.toLowerCase() === tag.toLowerCase()))
@@ -39,20 +41,13 @@ export function pageTags(root) {
   }
   return tags;
 }
-function isTitleLink(href) {
-  if (!href) return false;
-  try {
-    canonicalUrl(new URL(href, "https://multporn.net").href);
-    return true;
-  } catch {
-    return false;
-  }
-}
 function termFromHref(href) {
   if (!href) return "";
   try {
-    const path = new URL(href, "https://multporn.net").pathname;
-    const match = /\/(?:category|tag)\/([^/]+)/.exec(path);
+    const url = new URL(href, "https://multporn.net");
+    if (url.origin !== "https://multporn.net" || url.username || url.password)
+      return "";
+    const match = /^\/(?:category|tag)\/([^/]+)\/?$/.exec(url.pathname);
     return match ? decodeURIComponent(match[1]).replace(/[_-]+/g, " ") : "";
   } catch {
     return "";
