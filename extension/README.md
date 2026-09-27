@@ -17,11 +17,13 @@ This release targets Chromium browsers. Firefox packaging and validation are not
 
 ## First workflow
 
-1. Visit a supported title at multporn.net (comic, manga, or upload with a recognized gallery).
-2. Select **Save to library** in the Folio companion.
-3. Open **Library** to set reading status, collections, or a page bookmark.
-4. Choose **Continue reading** to reopen the title. Juicebox readers navigate to the saved image through their API; continuous `.pages--full` readers scroll to it. Finished titles offer **Read again** from page 1.
-5. Juicebox page changes are checked every 400 ms while the tab is visible. Continuous-reader scrolling updates progress after 600 ms of inactivity. Finished/dropped titles keep their status and bookmark during automatic tracking, including changes made in another library tab. The explicit Bookmark page action moves a title to Reading.
+1. Open Folio. Background discovery periodically scans a small bounded slice of source listings and builds the local candidate catalog without opening source tabs.
+2. Open **For you** and choose **Refresh discovery** whenever you want an immediate scan.
+3. Pick a recommendation or saved title and choose **Read in Folio**. The extension fetches the source HTML, extracts the gallery image URLs without executing source scripts, and renders them in its own reader.
+4. Use paged or continuous mode, fit width/height, zoom, fullscreen, and keyboard navigation. Reading progress is written to the same local library record.
+5. Saving is optional before previewing. An unsaved recommendation can be opened in Folio Reader first and saved from the reader if you want to keep it.
+
+The older source-page companion remains available as a fallback and for metadata capture when you happen to browse the source directly, but normal discovery and reading no longer require keeping the source website open.
 
 After upgrading to 0.2.0, reload the extension and source tabs. Revisit each existing title once to repair its title and page count. Legacy userscript page badges are excluded from heading extraction. Personal records are preserved; no database reset or reimport is needed. Missing reader APIs leave manual bookmarking available. A resume request waits up to 15 seconds for reader initialization and never clamps an unavailable bookmark to another page.
 
@@ -37,13 +39,13 @@ Existing records acquire a cover URL the next time you visit their title page af
 
 The library supports title search, status/collection filters, recent activity/title/page-count sorting, and JSON export/import. Imports add missing titles and leave existing personal records intact. Removing a title deletes its metadata and personal record after confirmation.
 
-Data stays in the extension's IndexedDB on this browser profile. Source website scripts cannot directly read it. There is no account, server, background crawler, telemetry, or automatic cross-device synchronization. Back up before uninstalling the extension or changing browser profiles; uninstalling can erase extension storage.
+Data stays in the extension's IndexedDB on this browser profile. Source website scripts cannot directly read it. There is no account, server, telemetry, or automatic cross-device synchronization. Version 0.6 adds a bounded local background discovery crawler that runs from the extension itself. Back up before uninstalling the extension or changing browser profiles; uninstalling can erase extension storage.
 
 ## Personal workspace (0.4.0)
 
 - **Save while browsing:** supported source listing cards get a Save to Folio button and saved reading-status indicators. Newly appended listings are detected. The legacy userscript's ranking cards are supported too.
 - **Title drawer:** click a book cover or title to view its author, description, collections, and recent reading history. Refresh details fetches the source page. Add private notes, Favorite, pin to Read next, follow new pages, and choose a cover or typographic jacket. Personal edits are saved explicitly.
-- **Updates:** enable Follow new pages in a title's drawer, then open Updates → Check for updates. Checks run sequentially while the library tab is open, can be stopped, and report individual failures without replacing valid metadata. Rate limiting stops the batch. No scheduled background crawling runs.
+- **Updates:** enable Follow new pages in a title's drawer, then open Updates → Check for updates. Manual checks still run sequentially and can be stopped. In 0.6, scheduled discovery also refreshes a bounded set of followed titles in the background; rate limiting stops the current discovery cycle.
 - **New-page baseline:** saved titles start with their known page count as the baseline. Growth above it appears in Updates. Read new pages opens the first page beyond that baseline and resumes reading; Mark seen acknowledges the latest count without changing your reading status or bookmark. Repeated checks don't consume updates. Titles with no known count establish a baseline on their first successful count instead of claiming all pages are new.
 - **Publication status:** Unknown / Still publishing / Publication complete is a separate personal label. Marking a title Finished means you finished reading; Folio does not infer that the author has stopped publishing.
 - **Collections and queue:** collection names become sidebar destinations with cover mosaics. Favorites and Read next have dedicated shelves. Drag cards or use Move earlier/later controls to arrange shelves. Collection and queue orders are stored independently. Selecting a collection uses Shelf order; other sorts remain available.
@@ -68,21 +70,33 @@ Reload the unpacked extension, then reload the library and source tabs. Version 
 
 Tag extraction accepts only explicit title tag fields. Passive listing observations never erase richer detail metadata; an authoritative detail observation may intentionally replace fields with empty values when the source really reports none.
 
+## Autonomous discovery and Folio Reader (0.6.0)
+
+Folio no longer depends on a source tab being open.
+
+- **Background discovery:** a Manifest V3 alarm runs roughly every six hours. A short-lived offscreen document provides DOM parsing while the service worker owns scheduling, state, storage, and rate-limit handling. Scheduled runs inspect up to four listing pages and enrich up to twelve stale/new candidates; a manual Refresh discovery run can inspect up to six listing pages and eighteen candidates.
+- **Polite source access:** requests are same-origin to the configured source, use no credentials, reject redirects, have timeouts and size limits, run detail enrichment in pairs with delays, and stop the cycle on rate limiting. The existing 2,500-item catalog cap still applies.
+- **Native reader:** Folio Reader fetches one title page, parses supported gallery images from inert HTML, and displays the images on a `chrome-extension://` page. Source JavaScript is not executed. Paged and continuous modes, fit controls, zoom, fullscreen, keyboard navigation, save-from-preview, and local progress are built in.
+- **Fallback:** if Folio cannot recognize a title's gallery markup, the reader shows an explicit source-page fallback instead of silently inventing pages.
+- **Legacy companion:** source-page reading support remains for compatibility, but library Continue reading, Read again, Read new pages, and recommendation clicks now target Folio Reader.
+
+The source still hosts the metadata and page images. "Independent reader" here means Folio owns discovery, navigation, presentation, progress, and library UX; it does not copy or permanently mirror the source media.
+
 ## Architecture
 
 - `src/core/model.js`: validated records and versioned backup format.
 - `src/core/database.js`: IndexedDB schema migrations and atomic storage operations. `personal` owns reading state, `metadata` owns saved-title source metadata, and `catalog` owns bounded unsaved discovery observations.
 - `src/core/recommender.js`: the Folio side of the local recommender. Maps library records to ranking items, rebuilds the profile from the library plus the stored explicit choices, and owns the `folio:recommender` profile store.
 - `packages/local-recommender/`: the standalone, dependency-free ranking package. Used by `ranking-worker.js`; it still knows nothing about Folio's models or database.
-- `src/adapters/multporn.js`: detail-page detection, source tag extraction, and continuous-reader image mapping.
+- `src/adapters/multporn.js`: source adapter for title/listing metadata, pagination discovery, and native-reader page extraction.
 - `src/adapters/juicebox-bridge.js`: small MAIN-world bridge using the site's `window.jcgal` API. Supports only reading current/total pages and navigating to a bounded image index. It has no access to extension storage.
 - `src/adapters/reader.js`: isolated-world bridge client with validated responses and request timeouts.
 - `src/content.js`: isolated site companion, explicit bookmarks, and supported-reader progress.
 - `src/listings.js`: isolated listing controls, bounded status lookups, and dynamic listing observation.
-- `src/background.js`: service-worker message boundary. Source content scripts can access their current title or request minimal saved statuses for up to 100 explicit listing URLs at a time. They cannot export, delete, reorder, or enumerate the complete library.
+- `src/background.js`: service-worker message boundary plus six-hour discovery scheduling, offscreen-parser lifecycle, discovery status, and native-reader opening.
 - `src/ui/workspace.js`: detail drawer, collections, preferences, privacy, and manual update-check orchestration.
 - `src/ui/update-checker.js`: same-host, timeout-bounded HTML fetches parsed into inert templates; redirects are rejected, and source scripts are not executed.
-- `src/ui/`: full-page library. All supplied titles and collection names are rendered as text.
+- `src/offscreen.js`: short-lived DOM parser used by background discovery; it fetches bounded listing/detail pages and returns inert metadata snapshots.\n- `src/ui/reader.js`: native Folio reader and reading-progress persistence.\n- `src/ui/`: full-page library. All supplied titles and collection names are rendered as text.
 
 Schema version 1 creates the saved metadata/personal stores; version 2 migrates personal records and initializes known page-count baselines; version 3 adds the separate unsaved `catalog` store. Future schema migrations belong in `onupgradeneeded`; unknown future backup versions are rejected. Writes resolve after transaction commit.
 
@@ -103,7 +117,7 @@ Run the opt-in live probe with `npm run test:live`. It creates a disposable brow
 
 ## Scope and next steps
 
-This release covers local unsaved-title discovery, personal organization, reading, and manual update checks. Legacy cache import, custom reader controls, scheduled checking, automatic backup, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.
+This release covers autonomous local discovery, a native Folio reader, personal organization, reading progress, and manual/scheduled metadata checks. Legacy cache import, automatic backup, offline media caching, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.
 
 ### Ranking responsiveness and tag boundaries
 
