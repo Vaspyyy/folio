@@ -21,7 +21,7 @@ import { request } from "./client.js";
     :host{position:fixed;bottom:18px;right:18px;z-index:2147483000;font:14px/1.5 system-ui;color:#eee}
     section{width:260px;max-width:calc(100vw - 60px);padding:16px;background:#182523;border:1px solid #52665c;border-radius:16px;box-shadow:0 8px 32px #0006}
     header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}button,input{font:inherit;border-radius:7px;padding:7px;border:1px solid #688577;background:#233b32;color:#fff}button{cursor:pointer}input{width:70px}p{font-size:12px;color:#bbcbc2;margin-bottom:0}label{display:block;margin:10px 0}nav{display:flex;gap:8px;flex-wrap:wrap}
-  </style><section><header><b>Folio / reading companion</b><button id="collapse" aria-label="Collapse companion" aria-expanded="true">−</button></header><div id="body"><nav><button id="save">Save to library</button><button id="library">Library ↗</button></nav><label>Page <input id="page" type="number" min="1" max="1000000" value="1"></label><nav><button id="bookmark">Bookmark page</button><button id="resume">Resume</button></nav><p id="status" role="status">Save this title to keep your place.</p></div></section>`;
+  </style><section><header><b>Folio / reading companion</b><button id="collapse" aria-label="Collapse companion" aria-expanded="true">−</button></header><div id="body"><nav><button id="save">Save to library</button><button id="native-reader">Open in Folio ↗</button><button id="library">Library ↗</button></nav><label>Page <input id="page" type="number" min="1" max="1000000" value="1"></label><nav><button id="bookmark">Bookmark page</button><button id="resume">Resume</button></nav><p id="status" role="status">Save this title to keep your place.</p></div></section>`;
   document.body.append(host);
   const $ = (id) => root.getElementById(id);
   let record = null,
@@ -92,6 +92,11 @@ import { request } from "./client.js";
     $("collapse").setAttribute("aria-expanded", String(!hidden));
   };
   $("library").onclick = () => request("open").catch(report);
+  $("native-reader").onclick = () =>
+    request("openReader", {
+      url: title.url,
+      page: state?.page || record?.personal.page || 1,
+    }).catch(report);
   $("save").onclick = async () => {
     try {
       const fresh = detectTitle(document, location.href) || title;

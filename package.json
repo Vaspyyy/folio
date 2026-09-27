@@ -1,6 +1,6 @@
 {
   "name": "folio-library",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "test": "node --test extension/tests/*.test.js packages/local-recommender/test/*.test.js",
     "test:recommender": "node --test packages/local-recommender/test/*.test.js",
     "check": "npm test && npm run build",
-    "test:browser": "npm run build && node scripts/smoke.mjs && node scripts/reader-smoke.mjs && node scripts/bookshelf-smoke.mjs && node scripts/workspace-smoke.mjs && node scripts/recommend-smoke.mjs",
+    "test:browser": "npm run build && node scripts/smoke.mjs && node scripts/reader-smoke.mjs && node scripts/bookshelf-smoke.mjs && node scripts/workspace-smoke.mjs && node scripts/recommend-smoke.mjs && node scripts/autonomous-smoke.mjs",
     "test:live": "npm run build && node scripts/reader-smoke.mjs --live",
     "format": "prettier --write extension/src extension/tests scripts"
   },

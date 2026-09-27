@@ -18,12 +18,17 @@ try {
   context.on("page", (page) =>
     page.on("pageerror", (error) => errors.push(error.message)),
   );
-  await context.route("https://multporn.net/**", (route) =>
-    route.fulfill({
+  await context.route("https://multporn.net/**", (route) => {
+    if (route.request().resourceType() === "image")
+      return route.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="500" height="600"><rect width="500" height="600" fill="#d7ddce"/></svg>',
+      });
+    return route.fulfill({
       contentType: "text/html",
-      body: `<!doctype html><title>Fixture reader</title><h1>The Garden Atlas</h1><div class="pages--full">${Array.from({ length: 8 }, (_, i) => `<img alt="Page ${i + 1}" width="500" height="600" style="display:block;background:hsl(${i * 25},30%,80%)" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='500' height='600'/%3E">`).join("")}</div>`,
-    }),
-  );
+      body: `<!doctype html><title>Fixture reader</title><h1>The Garden Atlas</h1><div class="pages--full">${Array.from({ length: 8 }, (_, i) => `<img alt="Page ${i + 1}" width="500" height="600" src="/sites/default/files/fixture-${i + 1}.jpg">`).join("")}</div>`,
+    });
+  });
   let worker = context.serviceWorkers()[0];
   if (!worker) worker = await context.waitForEvent("serviceworker");
   const id = new URL(worker.url()).host;
@@ -87,9 +92,10 @@ try {
   await card.getByRole("link", { name: "Continue reading" }).click();
   const resumed = await opened;
   await resumed.waitForLoadState();
-  await resumed.waitForFunction(() => scrollY > 1500);
-  await resumed.bringToFront();
-  await resumed.locator(".pages--full img").nth(5).scrollIntoViewIfNeeded();
+  await resumed.getByText("Page 4 of 8", { exact: true }).waitFor();
+  await resumed.getByRole("button", { name: "Next page" }).click();
+  await resumed.getByRole("button", { name: "Next page" }).click();
+  await resumed.getByText("Page 6 of 8", { exact: true }).waitFor();
   // Poll committed storage through the extension rather than sleeping for a guessed delay.
   let persisted = false;
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -105,7 +111,7 @@ try {
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  assert.ok(persisted, "scroll progress committed to storage");
+  assert.ok(persisted, "native reader progress committed to storage");
   await resumed.close();
   await library.bringToFront();
   await library.reload();

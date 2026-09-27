@@ -7,6 +7,8 @@ await build({
     background: "extension/src/background.js",
     library: "extension/src/ui/library.js",
     "ranking-worker": "extension/src/ui/ranking-worker.js",
+    offscreen: "extension/src/offscreen.js",
+    reader: "extension/src/ui/reader.js",
   },
   bundle: true,
   format: "esm",
@@ -31,6 +33,9 @@ for (const [source, target] of [
   ["extension/manifest.json", "manifest.json"],
   ["extension/src/ui/library.html", "library.html"],
   ["extension/src/ui/library.css", "library.css"],
+  ["extension/src/offscreen.html", "offscreen.html"],
+  ["extension/src/ui/reader.html", "reader.html"],
+  ["extension/src/ui/reader.css", "reader.css"],
 ])
   await copyFile(source, `dist/${target}`);
 console.log("Extension built in dist/");

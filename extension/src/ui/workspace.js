@@ -2,6 +2,14 @@ import { request } from "../client.js";
 import { newPages, coverUrl } from "../core/model.js";
 import { fetchMetadata } from "./update-checker.js";
 const $ = (id) => document.getElementById(id);
+const readerHref = (url, page = 1) => {
+  const target = new URL(chrome.runtime.getURL("reader.html"));
+  target.searchParams.set("url", url);
+  if (Number.isInteger(page) && page > 1)
+    target.searchParams.set("page", String(page));
+  target.hash = `folio-page=${Math.max(1, Number(page) || 1)}`;
+  return target.href;
+};
 const el = (tag, text, cls) => {
   const n = document.createElement(tag);
   if (text !== undefined) n.textContent = text;
@@ -84,7 +92,7 @@ export function createWorkspace({
     const page = (entry.personal.acknowledgedCount || 0) + 1;
     await request("progress", { url: entry.metadata.url, page });
     await chrome.tabs.create({
-      url: entry.metadata.url + "#folio-page=" + page,
+      url: readerHref(entry.metadata.url, page),
     });
     await refresh();
   }
@@ -149,7 +157,13 @@ export function createWorkspace({
         form.inert = false;
       }
     };
-    root.append(refreshButton);
+    const readerButton = el("a", "Read in Folio ↗", "read");
+    readerButton.href = readerHref(
+      entry.metadata.url,
+      entry.personal.status === "finished" ? 1 : entry.personal.page || 1,
+    );
+    readerButton.target = "_blank";
+    root.append(refreshButton, readerButton);
     if (newPages(entry)) {
       const update = el("div", undefined, "drawer-update");
       const read = el("button", `Read ${newPages(entry)} new pages ↗`, "read");

@@ -1,4 +1,4 @@
-> **New direction: Folio personal library** — the new browser extension lives in [`extension/`](extension/README.md). It provides a full-page library, collections, reading state, and backup/import, plus a **For you** discovery shelf that ranks unsaved titles observed while you browse with the standalone recommender in [`packages/local-recommender/`](packages/local-recommender/README.md). Build it with `npm ci && npm run build`, then load `dist/` as an unpacked Chromium extension. The userscript below remains the legacy ranking tool.
+> **New direction: Folio personal library** — the browser extension in [`extension/`](extension/README.md) now owns the library, personalized unsaved-title discovery, scheduled background catalog refreshes, and a native Folio reader. The source site supplies metadata and page images, but you do not need to keep it open. Build with `npm ci && npm run build`, then load `dist/` as an unpacked Chromium extension. The userscript below remains the legacy ranking tool.
 
 # Multporn Rank by Page Count
 

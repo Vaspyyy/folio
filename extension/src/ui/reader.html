@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Folio Reader</title>
+    <link rel="stylesheet" href="reader.css" />
+  </head>
+  <body>
+    <header class="reader-bar">
+      <a class="brand" href="library.html" aria-label="Back to Folio">f.</a>
+      <div class="reader-title">
+        <span class="eyebrow">FOLIO READER</span>
+        <strong id="title">Loading story…</strong>
+        <span id="author"></span>
+      </div>
+      <div class="reader-controls">
+        <label>Mode
+          <select id="mode">
+            <option value="paged">Paged</option>
+            <option value="continuous">Continuous</option>
+          </select>
+        </label>
+        <label>Fit
+          <select id="fit">
+            <option value="width">Width</option>
+            <option value="height">Height</option>
+            <option value="natural">Natural</option>
+          </select>
+        </label>
+        <label>Zoom
+          <input id="zoom" type="range" min="60" max="160" step="5" value="100" />
+        </label>
+        <button id="fullscreen" type="button">Fullscreen</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="loading" class="state">
+        <span class="spinner"></span>
+        <h1>Opening the story.</h1>
+        <p>Folio is fetching the page images directly from the source.</p>
+      </section>
+
+      <section id="error" class="state" hidden>
+        <h1>Folio could not build this reader.</h1>
+        <p id="error-message"></p>
+        <a id="source-fallback" class="button" target="_blank" rel="noreferrer">Open source page</a>
+      </section>
+
+      <section id="reader" hidden>
+        <div id="stage" class="stage"></div>
+      </section>
+    </main>
+
+    <footer class="reader-footer">
+      <button id="previous" type="button" aria-label="Previous page">← Previous</button>
+      <div class="reader-position">
+        <span id="position">Page 0 of 0</span>
+        <progress id="progress" max="100" value="0"></progress>
+      </div>
+      <button id="save" type="button">Save to library</button>
+      <button id="next" type="button" aria-label="Next page">Next →</button>
+    </footer>
+
+    <script type="module" src="reader.js"></script>
+  </body>
+</html>
