@@ -1,7 +1,7 @@
 import { metadata, personal, validateBackup, canonicalUrl } from "./model.js";
 export function openDatabase(name = "folio-library") {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(name, 2);
+    const request = indexedDB.open(name, 3);
     request.onupgradeneeded = (event) => {
       const db = request.result;
       if (event.oldVersion < 1) {
@@ -30,6 +30,8 @@ export function openDatabase(name = "folio-library") {
           };
         };
       }
+      if (event.oldVersion < 3 && !db.objectStoreNames.contains("catalog"))
+        db.createObjectStore("catalog", { keyPath: "id" });
     };
     request.onsuccess = () => {
       request.result.onversionchange = () => request.result.close();
@@ -62,6 +64,26 @@ export class Library {
         tx.objectStore("metadata"),
         tx.objectStore("personal"),
       );
+      await done;
+      return value;
+    } catch (error) {
+      try {
+        tx.abort();
+      } catch {}
+      await done.catch(() => {});
+      throw error;
+    }
+  }
+  async catalogTransaction(mode, work) {
+    const tx = this.db.transaction(["catalog"], mode);
+    const done = new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onabort = () =>
+        reject(tx.error || new Error("Catalog transaction aborted"));
+      tx.onerror = () => {};
+    });
+    try {
+      const value = await work(tx.objectStore("catalog"));
       await done;
       return value;
     } catch (error) {
@@ -105,8 +127,15 @@ export class Library {
       const oldMeta = await result(m.get(meta.id));
       m.put({
         ...meta,
-        author: meta.author || oldMeta?.author || "",
-        description: meta.description || oldMeta?.description || "",
+        author: Object.hasOwn(value, "author")
+          ? meta.author
+          : oldMeta?.author || "",
+        description: Object.hasOwn(value, "description")
+          ? meta.description
+          : oldMeta?.description || "",
+        // Missing means "this observation did not know"; an explicitly supplied
+        // empty tag list is authoritative and is allowed to clear stale metadata.
+        tags: Object.hasOwn(value, "tags") ? meta.tags : oldMeta?.tags || [],
         covers: meta.covers.length ? meta.covers : oldMeta?.covers || [],
         coverUrl: meta.coverUrl ?? oldMeta?.coverUrl ?? null,
         pageCount: meta.pageCount ?? oldMeta?.pageCount ?? null,
@@ -228,6 +257,82 @@ export class Library {
       }
     });
   }
+  async observeCatalog(values, authoritative = false) {
+    if (!Array.isArray(values) || values.length > 200)
+      throw new Error("Invalid catalog observation");
+    if (!values.length) return 0;
+    const now = Date.now();
+    await this.catalogTransaction("readwrite", async (catalog) => {
+      for (const raw of values) {
+        const meta = metadata(raw);
+        const old = await result(catalog.get(meta.id));
+        catalog.put({
+          ...(old || {}),
+          ...meta,
+          author: authoritative ? meta.author : old?.author || meta.author,
+          description: authoritative
+            ? meta.description
+            : old?.description || meta.description,
+          tags: authoritative
+            ? meta.tags
+            : old?.tags?.length
+              ? old.tags
+              : meta.tags,
+          covers: authoritative
+            ? meta.covers
+            : old?.covers?.length
+              ? old.covers
+              : meta.covers,
+          coverUrl: authoritative
+            ? meta.coverUrl
+            : old?.coverUrl ?? meta.coverUrl,
+          pageCount: authoritative
+            ? meta.pageCount
+            : old?.pageCount ?? meta.pageCount,
+          firstSeenAt: old?.firstSeenAt ?? now,
+          lastSeenAt: now,
+          detailObservedAt: authoritative
+            ? now
+            : old?.detailObservedAt ?? null,
+        });
+      }
+      const all = await result(catalog.getAll());
+      if (all.length > 2500) {
+        all.sort(
+          (a, b) =>
+            (b.lastSeenAt || 0) - (a.lastSeenAt || 0) ||
+            String(a.id).localeCompare(String(b.id)),
+        );
+        for (const stale of all.slice(2500)) catalog.delete(stale.id);
+      }
+    });
+    return values.length;
+  }
+  async catalog(limit = 2000) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 2500)
+      throw new Error("Invalid catalog limit");
+    const tx = this.db.transaction(["catalog", "personal"], "readonly");
+    const done = new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onabort = () =>
+        reject(tx.error || new Error("Catalog transaction aborted"));
+      tx.onerror = () => {};
+    });
+    const [items, saved] = await Promise.all([
+      result(tx.objectStore("catalog").getAll()),
+      result(tx.objectStore("personal").getAllKeys()),
+    ]);
+    await done;
+    const savedIds = new Set(saved);
+    return items
+      .filter((item) => !savedIds.has(item.id))
+      .sort(
+        (a, b) =>
+          (b.lastSeenAt || 0) - (a.lastSeenAt || 0) ||
+          String(a.id).localeCompare(String(b.id)),
+      )
+      .slice(0, limit);
+  }
   async remove(url) {
     const id = canonicalUrl(url);
     return this.transaction("readwrite", (m, p) => {
@@ -238,7 +343,7 @@ export class Library {
   async export() {
     return {
       format: "folio-library",
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       entries: await this.list(),
     };

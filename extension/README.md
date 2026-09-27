@@ -51,15 +51,30 @@ Data stays in the extension's IndexedDB on this browser profile. Source website 
 - **Privacy:** Hide library conceals library titles, artwork, collection names, and the detail drawer, removes rendered cover images, and remains enabled across reloads. Reveal library restores the display. This is a display control, not encryption or a lock on stored data.
 - **Continue Reading:** the lead section still displays at most three titles. View all opens the full Reading shelf.
 
-Existing records migrate automatically to database version 2. Bookmarks, statuses, collections, and timestamps are preserved. New backup exports use format version 2 and include favorites, queue/shelf ordering, follow baselines, notes, cover choices, publication labels, and up to 50 recent reading events. Version 1 backups remain importable. Appearance preferences remain local to this browser.
+Existing records migrate automatically to database version 3. Bookmarks, statuses, collections, and timestamps are preserved. New backup exports use format version 3 and include favorites, queue/shelf ordering, follow baselines, notes, cover choices, publication labels, and up to 50 recent reading events. Versions 1 and 2 backups remain importable. Appearance preferences remain local to this browser.
 
 Reload the unpacked extension, then reload the library and source tabs. Version 0.4.0 adds access to `https://multporn.net/*` so the library can fetch source metadata for the actions above. If the browser asks to approve that site access, enable it to use update checks and Refresh details. No other host access is requested.
+
+## Recommendations (0.5.0)
+
+**For you** is a discovery shelf, not a sort mode for the existing library. Folio keeps two separate local datasets:
+
+- **Library observations** train the taste profile. Merely saving is weak evidence; reading/finishing is stronger, favorites are stronger again, and explicit **More like this / Less like this** choices are strongest.
+- **Catalog observations** are unsaved titles seen on source listing/detail pages. Listing scans record candidates without adding them to the personal library. Detail visits store authoritative tags/authors, and opening For You performs a small, rate-limited enrichment pass for candidates still missing detail metadata.
+- **Candidates stay unsaved.** The ranking worker receives the personal library as profile evidence and the unsaved local catalog as candidates. Saved titles are never returned as recommendations.
+- **Familiar ↔ Explore** trades close tag/author/combination affinity for novelty and slate diversity while retaining hard exclusions and negative evidence.
+- **Feedback persists independently of library membership.** Saving or later removing a title does not erase an explicit taste choice. **Hide** is a hard candidate dismissal; **Less like this** is negative preference evidence and is intentionally different.
+- **Storage stays local.** The catalog is bounded to 2,500 passive observations. Recommendation preferences are stored in `localStorage`; catalog/library metadata live in IndexedDB. The worker keeps ranking off the UI thread and stale jobs are cancelled.
+
+Tag extraction accepts only explicit title tag fields. Passive listing observations never erase richer detail metadata; an authoritative detail observation may intentionally replace fields with empty values when the source really reports none.
 
 ## Architecture
 
 - `src/core/model.js`: validated records and versioned backup format.
-- `src/core/database.js`: IndexedDB schema migrations and atomic storage operations. The `personal` store owns reading state and collections; the separate `metadata` store owns observations from the source. Metadata refresh never overwrites personal data.
-- `src/adapters/multporn.js`: detail-page detection and continuous-reader image mapping.
+- `src/core/database.js`: IndexedDB schema migrations and atomic storage operations. `personal` owns reading state, `metadata` owns saved-title source metadata, and `catalog` owns bounded unsaved discovery observations.
+- `src/core/recommender.js`: the Folio side of the local recommender. Maps library records to ranking items, rebuilds the profile from the library plus the stored explicit choices, and owns the `folio:recommender` profile store.
+- `packages/local-recommender/`: the standalone, dependency-free ranking package. Used by `ranking-worker.js`; it still knows nothing about Folio's models or database.
+- `src/adapters/multporn.js`: detail-page detection, source tag extraction, and continuous-reader image mapping.
 - `src/adapters/juicebox-bridge.js`: small MAIN-world bridge using the site's `window.jcgal` API. Supports only reading current/total pages and navigating to a bounded image index. It has no access to extension storage.
 - `src/adapters/reader.js`: isolated-world bridge client with validated responses and request timeouts.
 - `src/content.js`: isolated site companion, explicit bookmarks, and supported-reader progress.
@@ -69,7 +84,7 @@ Reload the unpacked extension, then reload the library and source tabs. Version 
 - `src/ui/update-checker.js`: same-host, timeout-bounded HTML fetches parsed into inert templates; redirects are rejected, and source scripts are not executed.
 - `src/ui/`: full-page library. All supplied titles and collection names are rendered as text.
 
-Schema version 1 creates both stores; version 2 migrates personal records and initializes known page-count baselines. Future schema migrations belong in `onupgradeneeded`; unknown future backup versions are rejected. Writes resolve after transaction commit. Concurrent record edits perform their read/modify/write in the same transaction.
+Schema version 1 creates the saved metadata/personal stores; version 2 migrates personal records and initializes known page-count baselines; version 3 adds the separate unsaved `catalog` store. Future schema migrations belong in `onupgradeneeded`; unknown future backup versions are rejected. Writes resolve after transaction commit.
 
 The extension requests host access only to `https://multporn.net/*` for source metadata checks. It requests no tabs permission or access to other sites. Its declared content scripts run only on `https://multporn.net/*`. Cover artwork loads only when the optional artwork toggle is enabled. The library remains usable offline with typographic jackets.
 
@@ -80,7 +95,7 @@ npm run check
 BROWSER_PATH=/usr/bin/brave npm run test:browser
 ```
 
-The browser smoke tests also cover listing saves, notes and covers, update detection, cancellation/failures, queue and collection ordering, appearance, and privacy. The existing suites cover continuous readers, delayed Juicebox initialization, and the bookshelf UI (editing, progress, filters, optional covers, failed-image fallback, and responsive layout). The continuous-reader test loads the real built extension in a disposable profile, intercepts source requests with a non-explicit synthetic gallery, exercises saving/editing/reloading/resuming, and produces desktop/mobile screenshots in `test-results/`. It does not contact the live site. `BROWSER_PATH` can point to another compatible Chromium binary supporting unpacked extensions.
+The browser smoke tests also cover listing saves, notes and covers, update detection, cancellation/failures, queue and collection ordering, appearance, and privacy. The **For you** shelf has its own smoke test (`scripts/recommend-smoke.mjs`): it trains on a fixture library, ranks unsaved catalog candidates, checks save/dismiss/feedback behavior, verifies persisted Explore state, and exercises a 600-candidate worker ranking. The existing suites cover continuous readers, delayed Juicebox initialization, and the bookshelf UI (editing, progress, filters, optional covers, failed-image fallback, and responsive layout). The continuous-reader test loads the real built extension in a disposable profile, intercepts source requests with a non-explicit synthetic gallery, exercises saving/editing/reloading/resuming, and produces desktop/mobile screenshots in `test-results/`. It does not contact the live site. `BROWSER_PATH` can point to another compatible Chromium binary supporting unpacked extensions.
 
 On 2026-09-26, the live technical probe verified a 43-page Juicebox title: count/title repair, saved status/collection preservation, API resume, page-change persistence, and reopening. Image, media, font, and third-party requests were blocked during the probe; this verifies the reader API workflow, not artwork rendering or every site layout. Slideshow totals come from the API rather than rendered image elements.
 
@@ -88,4 +103,16 @@ Run the opt-in live probe with `npm run test:live`. It creates a disposable brow
 
 ## Scope and next steps
 
-This release covers discovery, personal organization, reading, and manual update checks. Legacy cache import, catalog ranking, custom reader controls, scheduled checking, automatic backup, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.
+This release covers local unsaved-title discovery, personal organization, reading, and manual update checks. Legacy cache import, custom reader controls, scheduled checking, automatic backup, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.
+
+### Ranking responsiveness and tag boundaries
+
+Ranking runs in a module worker, so library rendering and editing do not wait for
+it. New requests terminate obsolete workers, and stale responses cannot replace
+newer results. The profile and candidate pool are separate: saved/read titles train
+taste, while unsaved catalog observations are ranked for discovery.
+
+Tag extraction accepts only explicit `field-name-field-tags` fields in the current
+title container when available. Navigation, sidebars, related listings, external
+links, and wrappers around title links are excluded. Pages without a recognized
+field yield no tags; live markup compatibility remains unverified.

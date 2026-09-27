@@ -8,6 +8,12 @@ import { request } from "./client.js";
     installListingControls();
     return;
   }
+  // A detail page is useful discovery metadata even when the user never saves it.
+  // This stays separate from the personal library.
+  request("observeCatalog", {
+    items: [title],
+    authoritative: true,
+  }).catch(() => {});
   const host = document.createElement("aside");
   host.id = "folio-companion";
   const root = host.attachShadow({ mode: "closed" });

@@ -4,7 +4,11 @@ import "fake-indexeddb/auto";
 import { JSDOM } from "jsdom";
 import { Library, openDatabase } from "../src/core/database.js";
 import { canonicalUrl } from "../src/core/model.js";
-import { detectTitle, readingImages } from "../src/adapters/multporn.js";
+import {
+  detectTitle,
+  pageTags,
+  readingImages,
+} from "../src/adapters/multporn.js";
 const title = {
   url: "https://multporn.net/comics/fixture",
   title: "Fixture story",
@@ -201,7 +205,8 @@ test("v1 database migration preserves records and initializes update baselines",
   });
   const db = new Library(await openDatabase(name));
   const entry = await db.get(title.url);
-  assert.equal(db.db.version, 2);
+  assert.equal(db.db.version, 3);
+  assert.equal(db.db.objectStoreNames.contains("catalog"), true);
   assert.equal(entry.personal.acknowledgedCount, 12);
   assert.equal(entry.personal.status, "finished");
   assert.equal(entry.personal.updatedAt, 123);
@@ -278,4 +283,157 @@ test("personal extras, history, collection order and queue order survive backup"
     1,
   );
   assert.equal((await legacy.get(title.url)).personal.acknowledgedCount, 12);
+});
+test("source tags are read conservatively from a title page", () => {
+  const field = new JSDOM(
+    '<h1>Fixture</h1><div class="juicebox-container"></div><div class="field-name-field-tags"><a href="/category/Furry">Furry</a><a href="/category/furry">furry</a><a href="/tag/Deep_Space">Deep Space</a><a href="/comics/other-title">Another story</a><span class="field-item">Unlinked term</span></div>',
+  ).window.document;
+  assert.deepEqual(pageTags(field), ["Furry", "Deep Space", "Unlinked term"]);
+  assert.deepEqual(detectTitle(field, title.url).tags, [
+    "Furry",
+    "Deep Space",
+    "Unlinked term",
+  ]);
+  // Without a recognized field, taxonomy links are not title metadata.
+  const bare = new JSDOM(
+    '<h1>Fixture</h1><div class="juicebox-container"></div><nav><a href="/new">New</a><a href="/comics/other-title">Another story</a></nav><a href="/category/Old_Guard">Old Guard</a>',
+  ).window.document;
+  assert.deepEqual(pageTags(bare), []);
+  // A link with no usable text falls back to its own term.
+  const wordless = new JSDOM(
+    '<div class="field-name-field-tags"><a href="/category/Deep_Space"></a></div>',
+  ).window.document;
+  assert.deepEqual(pageTags(wordless), ["Deep Space"]);
+  assert.deepEqual(pageTags(new JSDOM("<p>Nothing</p>").window.document), []);
+});
+test("tag metadata excludes navigation, related content, and title-link wrappers", () => {
+  const doc = new JSDOM(`
+    <nav><a href="/category/fantasy">Fantasy</a></nav>
+    <aside class="field-name-field-tags"><a href="/category/mystery">Mystery</a></aside>
+    <article><h1>Programming Essentials</h1><div class="juicebox-container"></div>
+      <div class="field-name-field-tags">
+        <div class="field-item"><a href="/comics/unrelated">Unrelated Title</a></div>
+        <div class="field-item"><a href="/category/science">Science</a></div>
+        <div class="field-item"><a href="https://other.example/category/false">External</a></div>
+        <a href="/search?next=/category/wrong">Search</a>
+        <div class="field-item"><a href="/category/%ZZ">Malformed</a></div>
+        <span class="field-item">Education</span>
+      </div>
+      <div class="related"><div class="field-name-field-tags"><a href="/category/romance">Romance</a></div></div>
+    </article>
+    <article><div class="field-name-field-tags"><a href="/category/history">History</a></div></article>
+  `).window.document;
+  assert.deepEqual(pageTags(doc), ["Science", "Education"]);
+  const unknown = new JSDOM(
+    '<nav><a href="/category/fantasy">Fantasy</a><a href="/category/mystery">Mystery</a></nav><article><h1>Programming Essentials</h1></article>',
+  ).window.document;
+  assert.deepEqual(pageTags(unknown), []);
+});
+
+test("tags are validated, capped, preserved on listing saves and included in backups", async () => {
+  const { metadata } = await import("../src/core/model.js");
+  const tags = Array.from({ length: 45 }, (_, i) => ` tag ${i} `);
+  assert.equal(metadata({ ...title, tags }).tags.length, 40);
+  assert.equal(metadata({ ...title, tags }).tags[0], "tag 0");
+  assert.deepEqual(
+    metadata({ ...title, tags: ["  Space  ", "Space", "", 7, "x".repeat(200)] })
+      .tags,
+    ["Space", "x".repeat(80)],
+  );
+  const db = await library();
+  await db.save({ ...title, tags: ["Furry", "Space"] });
+  await db.save(title); // A listing save carries no tags and must not erase them.
+  assert.deepEqual((await db.get(title.url)).metadata.tags, ["Furry", "Space"]);
+  const backup = await db.export();
+  assert.equal(backup.version, 3);
+  const other = await library();
+  await other.import(backup);
+  assert.deepEqual((await other.get(title.url)).metadata.tags, [
+    "Furry",
+    "Space",
+  ]);
+  const legacy = await library();
+  assert.equal(
+    await legacy.import({
+      ...backup,
+      version: 2,
+      entries: [{ metadata: { ...title }, personal: {} }],
+    }),
+    1,
+    "a version 2 backup without tags still imports",
+  );
+  assert.deepEqual((await legacy.get(title.url)).metadata.tags, []);
+});
+
+
+test("catalog observations are separate from the library and authoritative detail metadata wins", async () => {
+  const db = await library();
+  const observed = {
+    url: "https://multporn.net/comics/catalog-fixture",
+    title: "Catalog fixture",
+    pageCount: null,
+  };
+  await db.observeCatalog([observed], false);
+  await db.observeCatalog(
+    [
+      {
+        ...observed,
+        author: "Alex North",
+        tags: ["Space", "Furry"],
+        pageCount: 42,
+      },
+    ],
+    true,
+  );
+  // A later listing sighting knows less and must not erase detailed metadata.
+  await db.observeCatalog([observed], false);
+  let item = (await db.catalog()).find((value) => value.id === observed.url);
+  assert.equal(item.author, "Alex North");
+  assert.deepEqual(item.tags, ["Space", "Furry"]);
+  assert.equal(item.pageCount, 42);
+  assert.ok(item.detailObservedAt);
+
+  // An authoritative detail refresh is allowed to explicitly clear stale fields.
+  await db.observeCatalog(
+    [{ ...observed, author: "", tags: [], pageCount: null }],
+    true,
+  );
+  item = (await db.catalog()).find((value) => value.id === observed.url);
+  assert.equal(item.author, "");
+  assert.deepEqual(item.tags, []);
+  assert.equal(item.pageCount, null);
+});
+
+test("saving an observed catalog title removes it from candidates and removing it makes it eligible again", async () => {
+  const db = await library();
+  const observed = {
+    url: "https://multporn.net/comics/discovery-fixture",
+    title: "Discovery fixture",
+    tags: ["Space"],
+    author: "Alex North",
+  };
+  await db.observeCatalog([observed], true);
+  assert.equal(
+    (await db.catalog()).some((value) => value.id === observed.url),
+    true,
+  );
+  await db.save(observed);
+  assert.equal(
+    (await db.catalog()).some((value) => value.id === observed.url),
+    false,
+  );
+  await db.remove(observed.url);
+  assert.equal(
+    (await db.catalog()).some((value) => value.id === observed.url),
+    true,
+  );
+});
+
+test("saved metadata distinguishes omitted tags from an authoritative empty tag list", async () => {
+  const db = await library();
+  await db.save({ ...title, tags: ["Space", "Furry"] });
+  await db.save(title);
+  assert.deepEqual((await db.get(title.url)).metadata.tags, ["Space", "Furry"]);
+  await db.save({ ...title, tags: [] }, true);
+  assert.deepEqual((await db.get(title.url)).metadata.tags, []);
 });

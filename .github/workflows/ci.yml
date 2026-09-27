@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/for-you-recommendations]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: git diff --check
+      - name: Install extension-capable Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Resolve Chromium
+        shell: bash
+        run: |
+          BROWSER_PATH="$(node --input-type=module -e "import { chromium } from 'playwright'; console.log(chromium.executablePath())")"
+          echo "BROWSER_PATH=$BROWSER_PATH" >> "$GITHUB_ENV"
+      - run: npm run test:browser

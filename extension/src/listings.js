@@ -14,6 +14,13 @@ export function installListingControls() {
     busy = true;
     try {
       const items = extractListingItems(document, location.href);
+      for (let i = 0; i < items.length; i += 200)
+        await request("observeCatalog", {
+          items: items
+            .slice(i, i + 200)
+            .map(({ mount, ...metadata }) => metadata),
+          authoritative: false,
+        });
       const statuses = new Map();
       for (let i = 0; i < items.length; i += 100)
         for (const record of await request("listingStatus", {

@@ -74,7 +74,8 @@ document.body.append(slider.element);
 
 Items require unique, nonempty string `id` and string `title`. `authors` and `tags`
 default to empty arrays; `saved`, `liked`, and `dismissed` default to false. Optional
-`metadata` is returned unchanged with the original item. Tags/authors are trimmed,
+`engagement` is a number from 0 through 1 for inferred host activity such as reading.
+Optional `metadata` is returned unchanged with the original item. Tags/authors are trimmed,
 Unicode NFKC normalized, lowercased, deduplicated, and sorted. IDs remain exact and
 case-sensitive. Unknown vocabulary is valid; no synonyms or domain assumptions exist.
 
@@ -96,8 +97,9 @@ all its tags are present. Exclusions and dismissals apply at every slider positi
 
 ## Scoring and explanations
 
-- Inferred signal weight: saved = +1, liked = +3, dismissed = -3. Flags do not add
-  together. Explicit feedback overrides saved/liked with -3, 0, or +3; dismissal wins.
+- Signal strength is ordered intentionally: saved = +1, inferred engagement = +1..+2,
+  liked/favorite = +3, and explicit feedback = -4/0/+4. Explicit feedback overrides
+  inferred state; dismissal is a hard filter.
 - Each tag, unordered tag pair, and author accumulates signed weights. Affinity is
   `sum(weights) / (sum(abs(weights)) + 2)`, providing bounded values and smoothing
   sparse evidence. All unordered pairs are learned, not larger combinations.
@@ -133,7 +135,10 @@ The host should show failures and decide recovery. Storage is local, unencrypted
 last-writer-wins across tabs; cross-tab merging is the host's responsibility.
 
 The algorithm targets modest local collections. Pair learning is quadratic in tags per
-item; greedy diversity selection grows with candidate count and requested result count.
+item; greedy diversity selection caches each candidate’s maximum similarity and
+compares only the newest selection on each iteration. It performs O(N × K)
+similarity comparisons for N candidates and K requested results, plus sorting.
+Hosts with large collections should run ranking in a worker.
 No model downloads, dependencies, clocks, or random seeds are needed by the runtime.
 The slider uses a native, labeled, keyboard-accessible range input, with an output and
 accessible value text; style its returned `element` in the host UI.
@@ -145,5 +150,12 @@ npm run test:recommender
 npm run check
 ```
 
-The module is not bundled into the extension or wired to an application screen.
-The existing extension build and storage schema are unchanged.
+Folio uses this package with two distinct inputs: its personal library becomes profile
+observations, while a separate local catalog supplies unsaved candidates. Explicit
+feedback snapshots are persisted independently of current library membership, so a
+later save/remove transition does not erase taste history. Ranking runs in a worker;
+the package itself remains unaware of Folio's source, database, and UI.
+
+Hosts should keep inferred engagement separate from explicit feedback, keep dismissals
+as hard exclusions, and preserve candidate/profile separation if they want Explore's
+novelty term to be meaningful.

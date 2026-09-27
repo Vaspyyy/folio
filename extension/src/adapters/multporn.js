@@ -14,6 +14,45 @@ export function cleanTitle(doc) {
   }
   return clone.textContent.replace(/\s+/g, " ").trim();
 }
+export function pageTags(root) {
+  // Only explicit title tag fields are evidence. Global category navigation,
+  // related listings, and linked titles must not become this title's metadata.
+  const gallery = root.querySelector(
+    ".juicebox-container, #juicebox-container, .pages--full",
+  );
+  const scope = gallery?.closest("article, .node") || root;
+  const nodes = scope.querySelectorAll(
+    ".field-name-field-tags a[href], .field-name-field-tags .field-item",
+  );
+  const tags = [];
+  for (const node of nodes) {
+    if (node.closest("nav, aside, footer, .view, .related, .related-content"))
+      continue;
+    // Inspect anchors themselves, never a wrapper's combined link text.
+    if (node.matches(".field-item") && node.querySelector("a, .field-item"))
+      continue;
+    const href = node.getAttribute("href");
+    if (node.matches("a") && !termFromHref(href)) continue;
+    const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+    const tag = (text || termFromHref(href)).slice(0, 80);
+    if (tag && !tags.some((value) => value.toLowerCase() === tag.toLowerCase()))
+      tags.push(tag);
+    if (tags.length >= 40) break;
+  }
+  return tags;
+}
+function termFromHref(href) {
+  if (!href) return "";
+  try {
+    const url = new URL(href, "https://multporn.net");
+    if (url.origin !== "https://multporn.net" || url.username || url.password)
+      return "";
+    const match = /^\/(?:category|tag)\/([^/]+)\/?$/.exec(url.pathname);
+    return match ? decodeURIComponent(match[1]).replace(/[_-]+/g, " ") : "";
+  } catch {
+    return "";
+  }
+}
 export function detectTitle(doc, href) {
   let url;
   try {
@@ -44,6 +83,7 @@ export function detectTitle(doc, href) {
     )
       .trim()
       .slice(0, 6000),
+    tags: pageTags(doc),
     covers: [
       ...new Set(
         [...gallery.querySelectorAll("img")]

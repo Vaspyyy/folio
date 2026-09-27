@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Folio \u2014 Personal Comic Library",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Save titles, organize a personal library, and keep your reading place.",
   "action": {
     "default_title": "Open Folio library"
