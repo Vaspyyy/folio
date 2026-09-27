@@ -7,7 +7,7 @@ import {
 import { readingProgress, continueReading } from "./presentation.js";
 import { createWorkspace } from "./workspace.js";
 import { createWorkerRanker } from "./ranking-client.js";
-import { fetchMetadata } from "./update-checker.js";
+import { fetchDiscoveryMetadata } from "./update-checker.js";
 let workspace;
 const $ = (id) => document.getElementById(id);
 const labels = {
@@ -214,6 +214,8 @@ async function enrichRecommendations() {
     .slice(0, 12);
   if (!targets.length) return;
   enrichmentRunning = true;
+  $("ranking-status").textContent =
+    `Improving metadata… 0/${targets.length}`;
   const controller = new AbortController();
   let completed = 0;
   try {
@@ -223,7 +225,10 @@ async function enrichRecommendations() {
       await Promise.all(
         batch.map(async (metadata) => {
           try {
-            const fresh = await fetchMetadata(metadata.url, controller.signal);
+            const fresh = await fetchDiscoveryMetadata(
+              metadata.url,
+              controller.signal,
+            );
             await request("observeCatalog", {
               items: [fresh],
               authoritative: true,
@@ -813,8 +818,12 @@ $("collection").addEventListener("input", () => {
 });
 for (const id of ["search", "sort"]) $(id).addEventListener("input", render);
 $("clear-filters").onclick = () => {
-  active = "all";
   $("search").value = "";
+  if (active === "recommended") {
+    render();
+    return;
+  }
+  active = "all";
   $("collection").value = "";
   render();
 };

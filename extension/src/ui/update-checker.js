@@ -1,7 +1,12 @@
 import { canonicalUrl } from "../core/model.js";
-import { snapshotMetadata } from "../adapters/multporn.js";
-export async function fetchMetadata(url, signal) {
-  const response = await fetch(canonicalUrl(url), {
+import {
+  detectTitle,
+  snapshotMetadata,
+} from "../adapters/multporn.js";
+
+async function fetchRoot(url, signal) {
+  const canonical = canonicalUrl(url);
+  const response = await fetch(canonical, {
     signal: AbortSignal.any([
       signal || new AbortController().signal,
       AbortSignal.timeout(15000),
@@ -22,5 +27,20 @@ export async function fetchMetadata(url, signal) {
   if (html.length > 8_000_000) throw new Error("Source page is too large");
   const template = document.createElement("template");
   template.innerHTML = html;
-  return snapshotMetadata(template.content, url);
+  return { root: template.content, canonical };
+}
+
+export async function fetchMetadata(url, signal) {
+  const { root, canonical } = await fetchRoot(url, signal);
+  return snapshotMetadata(root, canonical);
+}
+
+// Discovery only needs trustworthy title metadata. Unlike an update check, it
+// does not require a recoverable total page count before tags/authors are useful.
+export async function fetchDiscoveryMetadata(url, signal) {
+  const { root, canonical } = await fetchRoot(url, signal);
+  const metadata = detectTitle(root, canonical);
+  if (!metadata)
+    throw new Error("This page does not expose supported title metadata");
+  return metadata;
 }
