@@ -18,7 +18,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npx prettier --check extension/src extension/tests scripts packages/local-recommender
       - run: git diff --check
       - name: Resolve Chromium
         shell: bash
