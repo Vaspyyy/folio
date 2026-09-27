@@ -143,7 +143,8 @@ export function readerPages(root, href = "https://multporn.net/") {
       nodes.push(...source.querySelectorAll("img"));
       continue;
     }
-    const template = root.ownerDocument?.createElement?.("template");
+    const document = root.ownerDocument || root;
+    const template = document.createElement?.("template");
     if (!template) continue;
     template.innerHTML = source.textContent || "";
     nodes.push(...template.content.querySelectorAll("img"));
