@@ -266,34 +266,29 @@ export class Library {
       for (const raw of values) {
         const meta = metadata(raw);
         const old = await result(catalog.get(meta.id));
-        const supplied = (key) => Object.hasOwn(raw, key);
         catalog.put({
           ...(old || {}),
           ...meta,
-          author:
-            authoritative || supplied("author")
-              ? meta.author
-              : old?.author || meta.author,
-          description:
-            authoritative || supplied("description")
-              ? meta.description
-              : old?.description || meta.description,
-          tags:
-            authoritative || supplied("tags")
-              ? meta.tags
-              : old?.tags || meta.tags,
-          covers:
-            authoritative || supplied("covers")
-              ? meta.covers
-              : old?.covers || meta.covers,
-          coverUrl:
-            authoritative || supplied("coverUrl")
-              ? meta.coverUrl
-              : old?.coverUrl ?? meta.coverUrl,
-          pageCount:
-            authoritative || supplied("pageCount")
-              ? meta.pageCount
-              : old?.pageCount ?? meta.pageCount,
+          author: authoritative ? meta.author : old?.author || meta.author,
+          description: authoritative
+            ? meta.description
+            : old?.description || meta.description,
+          tags: authoritative
+            ? meta.tags
+            : old?.tags?.length
+              ? old.tags
+              : meta.tags,
+          covers: authoritative
+            ? meta.covers
+            : old?.covers?.length
+              ? old.covers
+              : meta.covers,
+          coverUrl: authoritative
+            ? meta.coverUrl
+            : old?.coverUrl ?? meta.coverUrl,
+          pageCount: authoritative
+            ? meta.pageCount
+            : old?.pageCount ?? meta.pageCount,
           firstSeenAt: old?.firstSeenAt ?? now,
           lastSeenAt: now,
           detailObservedAt: authoritative

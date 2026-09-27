@@ -7,6 +7,7 @@ import {
 import { readingProgress, continueReading } from "./presentation.js";
 import { createWorkspace } from "./workspace.js";
 import { createWorkerRanker } from "./ranking-client.js";
+import { fetchMetadata } from "./update-checker.js";
 let workspace;
 const $ = (id) => document.getElementById(id);
 const labels = {
@@ -17,6 +18,7 @@ const labels = {
   dropped: "Dropped",
 };
 let entries = [],
+  catalog = [],
   active = "all",
   artwork = false,
   refreshVersion = 0,
@@ -32,7 +34,10 @@ const storage = () => {
 let engine, recommendationError;
 const rank = createWorkerRanker();
 let rankingRevision = 0,
-  rankingPending = false;
+  rankingPending = false,
+  rankingDirty = true,
+  enrichmentRunning = false;
+const enrichmentTried = new Set();
 try {
   engine = createRecommendationEngine({ storage: storage(), rank });
 } catch (error) {
@@ -153,9 +158,14 @@ function readLink(entry, className = "read") {
 }
 async function refresh() {
   const version = ++refreshVersion;
-  const data = await request("list");
+  const [data, observed] = await Promise.all([
+    request("list"),
+    request("catalog", { limit: 2000 }),
+  ]);
   if (version !== refreshVersion) return;
   entries = data;
+  catalog = observed;
+  rankingDirty = true;
   const selected = $("collection").value;
   $("collection").replaceChildren(new Option("All collections", ""));
   const names = [
@@ -164,16 +174,17 @@ async function refresh() {
   for (const name of names) $("collection").add(new Option(name, name));
   $("collection").value = names.includes(selected) ? selected : "";
   render();
-  await rerank(() => engine.update(entries));
+  if (active === "recommended") await ensureRanked();
 }
 async function rerank(action) {
   const revision = ++rankingRevision;
   rankingPending = true;
-  $("ranking-status").textContent = "Updating your shelf…";
+  $("ranking-status").textContent = "Updating recommendations…";
   try {
     const next = await action();
     if (revision !== rankingRevision) return false;
     results = next;
+    rankingDirty = false;
     return true;
   } catch (error) {
     if (revision === rankingRevision && error.name !== "AbortError")
@@ -182,10 +193,60 @@ async function rerank(action) {
   } finally {
     if (revision === rankingRevision) {
       rankingPending = false;
-      $("ranking-status").textContent = "";
-      // Do not replace forms on ordinary shelves when background work finishes.
-      if (active === "recommended" || $("sort").value === "match") render();
+      if (!enrichmentRunning) $("ranking-status").textContent = "";
+      if (active === "recommended") render();
     }
+  }
+}
+async function ensureRanked() {
+  if (!rankingDirty) return true;
+  return rerank(() => engine.update(entries, catalog));
+}
+async function enrichRecommendations() {
+  if (enrichmentRunning || active !== "recommended") return;
+  const targets = catalog
+    .filter(
+      (metadata) =>
+        !metadata.detailObservedAt &&
+        !engine.isDismissed(metadata.id) &&
+        !enrichmentTried.has(metadata.id),
+    )
+    .slice(0, 12);
+  if (!targets.length) return;
+  enrichmentRunning = true;
+  const controller = new AbortController();
+  let completed = 0;
+  try {
+    for (let i = 0; i < targets.length && !controller.signal.aborted; i += 2) {
+      const batch = targets.slice(i, i + 2);
+      for (const metadata of batch) enrichmentTried.add(metadata.id);
+      await Promise.all(
+        batch.map(async (metadata) => {
+          try {
+            const fresh = await fetchMetadata(metadata.url, controller.signal);
+            await request("observeCatalog", {
+              items: [fresh],
+              authoritative: true,
+            });
+          } catch (error) {
+            if (error.rateLimited) controller.abort();
+          } finally {
+            completed++;
+            if (active === "recommended")
+              $("ranking-status").textContent =
+                `Improving metadata… ${completed}/${targets.length}`;
+          }
+        }),
+      );
+      if (!controller.signal.aborted && i + 2 < targets.length)
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    catalog = await request("catalog", { limit: 2000 });
+    rankingDirty = true;
+    if (active === "recommended") await ensureRanked();
+  } finally {
+    enrichmentRunning = false;
+    if (!rankingPending) $("ranking-status").textContent = "";
   }
 }
 function editor(entry) {
@@ -325,9 +386,10 @@ function renderContinue() {
 }
 // "For you" cards explain their position and accept explicit feedback. Both
 // strings come from the recommender and are rendered as plain text.
-function why(entry) {
-  const result = results.get(entry.metadata.id),
-    rating = engine.rating(entry.metadata.id),
+function why(value) {
+  const metadata = value.metadata || value,
+    result = results.get(metadata.id),
+    rating = engine.rating(metadata.id),
     block = node("div", undefined, "why");
   block.append(
     node(
@@ -338,34 +400,161 @@ function why(entry) {
     ),
   );
   const controls = node("div", undefined, "rate-controls");
-  for (const [value, label] of [
+  for (const [feedback, label] of [
     [1, "More like this"],
     [-1, "Less like this"],
   ]) {
     const button = node("button", label, "rate");
     button.type = "button";
-    button.setAttribute("aria-pressed", String(rating === value));
-    button.setAttribute("aria-label", `${label}: ${entry.metadata.title}`);
+    button.setAttribute("aria-pressed", String(rating === feedback));
+    button.setAttribute("aria-label", `${label}: ${metadata.title}`);
     button.title =
-      value > 0
-        ? "Rank more titles with these tags higher"
-        : "Rank titles with these tags lower";
-    button.onclick = () => rate(entry, rating === value ? null : value, label);
+      feedback > 0
+        ? "Use these tags and authors as a strong positive preference"
+        : "Use these tags and authors as a strong negative preference";
+    button.onclick = () =>
+      rate(metadata, rating === feedback ? null : feedback, label);
     controls.append(button);
   }
   block.append(controls);
   return block;
 }
-async function rate(entry, value, label) {
-  if (!(await rerank(() => engine.rate(entry, value)))) return;
+async function rate(metadata, value, label) {
+  if (!(await rerank(() => engine.rate(metadata, value)))) return;
   message(value === null ? "Preference cleared." : "Preference saved.");
   [...document.querySelectorAll(".rate")]
     .find(
       (button) =>
-        button.getAttribute("aria-label") ===
-        `${label}: ${entry.metadata.title}`,
+        button.getAttribute("aria-label") === `${label}: ${metadata.title}`,
     )
     ?.focus();
+}
+const recommendationEntry = (metadata) => ({
+  metadata,
+  personal: {
+    status: "planned",
+    page: 0,
+    collections: [],
+    favorite: false,
+    queued: false,
+    following: false,
+    coverChoice: "auto",
+    updatedAt: metadata.lastSeenAt || 0,
+  },
+});
+async function saveRecommendation(metadata) {
+  try {
+    await request("save", { metadata });
+    message("Saved to your library.");
+    await refresh();
+  } catch (error) {
+    message(error.message);
+  }
+}
+async function dismissRecommendation(metadata) {
+  if (!(await rerank(() => engine.dismiss(metadata.id)))) return;
+  message("Recommendation hidden.");
+}
+function renderRecommended() {
+  $("updates-toolbar").hidden = true;
+  $("explore-toolbar").hidden = false;
+  $("continue-section").hidden = true;
+  $("collection-mosaic").hidden = true;
+  $("collection").disabled = true;
+  const manual = $("sort").querySelector('option[value="manual"]');
+  if (manual) manual.disabled = true;
+  if ($("sort").value === "manual" || $("sort").value === "recent")
+    $("sort").value = "match";
+
+  const query = $("search").value.toLowerCase().trim();
+  const byId = new Map(catalog.map((metadata) => [metadata.id, metadata]));
+  const visible = [...results.keys()]
+    .map((id) => byId.get(id))
+    .filter(
+      (metadata) =>
+        metadata &&
+        !engine.isDismissed(metadata.id) &&
+        metadata.title.toLowerCase().includes(query),
+    );
+  const sortMode = $("sort").value;
+  visible.sort((a, b) =>
+    sortMode === "title"
+      ? a.title.localeCompare(b.title)
+      : sortMode === "pages"
+        ? (b.pageCount || 0) - (a.pageCount || 0)
+        : (results.get(b.id)?.score ?? -Infinity) -
+            (results.get(a.id)?.score ?? -Infinity) ||
+          (b.lastSeenAt || 0) - (a.lastSeenAt || 0),
+  );
+
+  $("shelf-name").textContent = "For you";
+  $("shelf-total").textContent = visible.length;
+  $("shelf-description").textContent =
+    "New titles from what you have browsed, ranked by your own taste.";
+  $("count").textContent =
+    `${visible.length} ${visible.length === 1 ? "recommendation" : "recommendations"}`;
+  $("clear-filters").hidden = !query;
+  $("entries").replaceChildren();
+  $("empty").hidden = true;
+  $("no-results").hidden =
+    visible.length > 0 || rankingPending || enrichmentRunning;
+
+  for (const metadata of visible) {
+    const entry = recommendationEntry(metadata),
+      card = node("article", undefined, "card");
+    card.dataset.url = metadata.url;
+    const coverLink = node("button", undefined, "book-link");
+    coverLink.type = "button";
+    coverLink.replaceChildren(
+      art(entry),
+      node("span", "Discovery", "status-pill"),
+    );
+    coverLink.setAttribute("aria-label", `Open ${metadata.title}`);
+    coverLink.onclick = () => chrome.tabs.create({ url: metadata.url });
+
+    const body = node("div", undefined, "card-body"),
+      heading = node("h3"),
+      titleButton = node("button", metadata.title, "title-button");
+    titleButton.onclick = () => chrome.tabs.create({ url: metadata.url });
+    heading.append(titleButton);
+    const metaParts = [];
+    if (metadata.author) metaParts.push(metadata.author);
+    metaParts.push(
+      metadata.pageCount
+        ? `${metadata.pageCount} pages`
+        : metadata.detailObservedAt
+          ? "Length not known"
+          : "Metadata pending",
+    );
+    body.append(
+      heading,
+      node("div", metaParts.join(" · "), "book-meta"),
+    );
+    if (metadata.tags?.length) {
+      const tags = node("div", undefined, "collection-chips");
+      for (const tag of metadata.tags.slice(0, 4)) tags.append(node("span", tag));
+      if (metadata.tags.length > 4)
+        tags.append(node("span", `+${metadata.tags.length - 4}`));
+      body.append(tags);
+    }
+    body.append(why(metadata));
+
+    const footer = node("footer"),
+      save = node("button", "Save to library", "read"),
+      open = node("a", "Open source ↗", "read"),
+      hide = node("button", "Hide", "remove");
+    save.type = "button";
+    save.onclick = () => saveRecommendation(metadata);
+    open.href = metadata.url;
+    open.target = "_blank";
+    open.rel = "noreferrer";
+    hide.type = "button";
+    hide.onclick = () => dismissRecommendation(metadata);
+    footer.append(save, open, hide);
+    body.append(footer);
+    card.append(coverLink, body);
+    $("entries").append(card);
+  }
 }
 function render() {
   $("artwork").setAttribute("aria-checked", String(artwork));
@@ -392,9 +581,16 @@ function render() {
     $("navigation").append(button);
   }
   workspace?.navigation(active, $("collection").value, {
-    recommended: entries.filter((entry) => entry.personal.status !== "dropped")
+    recommended: catalog.filter((metadata) => !engine.isDismissed(metadata.id))
       .length,
   });
+  if (active === "recommended") {
+    renderRecommended();
+    return;
+  }
+  $("collection").disabled = false;
+  const manualSort = $("sort").querySelector('option[value="manual"]');
+  if (manualSort) manualSort.disabled = false;
   workspace?.mosaic($("collection").value);
   $("updates-toolbar").hidden = active !== "updates";
   $("explore-toolbar").hidden = active !== "recommended";
@@ -589,8 +785,15 @@ workspace = createWorkspace({
     active = mode;
     $("collection").value = collection;
     $("search").value = "";
-    if (mode === "recommended") $("sort").value = "match";
-    else if (mode === "queue" || collection) $("sort").value = "manual";
+    if (mode === "recommended") {
+      $("sort").value = "match";
+      render();
+      ensureRanked()
+        .then(() => enrichRecommendations())
+        .catch((error) => message(error.message));
+      return;
+    }
+    if (mode === "queue" || collection) $("sort").value = "manual";
     render();
   },
 });
@@ -598,7 +801,9 @@ const explore = createExploreSlider({
   document,
   value: engine.explore(),
   onChange(value) {
-    rerank(() => engine.setExplore(value));
+    rerank(() => engine.setExplore(value)).then((ok) => {
+      if (!ok) explore.setValue(engine.explore());
+    });
   },
 });
 $("explore").append(explore.element);
