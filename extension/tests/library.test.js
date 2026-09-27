@@ -6,7 +6,10 @@ import { Library, openDatabase } from "../src/core/database.js";
 import { canonicalUrl } from "../src/core/model.js";
 import {
   detectTitle,
+  listingPageUrls,
   pageTags,
+  readerPages,
+  readerSnapshot,
   readingImages,
 } from "../src/adapters/multporn.js";
 const title = {
@@ -436,4 +439,59 @@ test("saved metadata distinguishes omitted tags from an authoritative empty tag 
   assert.deepEqual((await db.get(title.url)).metadata.tags, ["Space", "Furry"]);
   await db.save({ ...title, tags: [] }, true);
   assert.deepEqual((await db.get(title.url)).metadata.tags, []);
+});
+
+
+test("native reader extracts ordered source pages without executing source scripts", () => {
+  const doc = new JSDOM(`
+    <h1>Reader Fixture</h1>
+    <div class="field-name-field-author"><a>Alex North</a></div>
+    <div class="field-name-field-tags"><a href="/category/Space">Space</a></div>
+    <div class="juicebox-container">
+      <noscript>
+        &lt;div class="jb-image"&gt;&lt;img src="/sites/default/files/page-1.jpg"&gt;&lt;/div&gt;
+        &lt;div class="jb-image"&gt;&lt;img data-src="/sites/default/files/page-2.jpg"&gt;&lt;/div&gt;
+      </noscript>
+    </div>
+  `).window.document;
+  const pages = readerPages(doc, title.url);
+  assert.deepEqual(pages, [
+    "https://multporn.net/sites/default/files/page-1.jpg",
+    "https://multporn.net/sites/default/files/page-2.jpg",
+  ]);
+  const snapshot = readerSnapshot(doc, title.url);
+  assert.equal(snapshot.metadata.title, "Reader Fixture");
+  assert.equal(snapshot.metadata.author, "Alex North");
+  assert.equal(snapshot.metadata.pageCount, 2);
+  assert.deepEqual(snapshot.metadata.tags, ["Space"]);
+});
+
+test("reader rejects cross-origin and non-artwork image URLs", () => {
+  const doc = new JSDOM(`
+    <h1>Reader Fixture</h1>
+    <div class="pages--full">
+      <img src="https://evil.example/track.jpg">
+      <img src="https://multporn.net/account/avatar.jpg">
+      <img src="/sites/default/files/good.jpg">
+    </div>
+  `).window.document;
+  assert.deepEqual(readerPages(doc, title.url), [
+    "https://multporn.net/sites/default/files/good.jpg",
+  ]);
+});
+
+test("background discovery follows only same-listing pager URLs and caps the scan", () => {
+  const doc = new JSDOM(`
+    <a href="/?page=2">Two</a>
+    <a href="/?page=1">One</a>
+    <a href="/?page=3">Three</a>
+    <a href="/category/space?page=9">Other listing</a>
+    <a href="https://evil.example/?page=1">External</a>
+  `).window.document;
+  assert.deepEqual(listingPageUrls(doc, "https://multporn.net/", 3), [
+    "https://multporn.net/",
+    "https://multporn.net/?page=1",
+    "https://multporn.net/?page=2",
+  ]);
+  assert.throws(() => listingPageUrls(doc, "https://multporn.net/", 0));
 });
