@@ -1,8 +1,159 @@
 import { Library, openDatabase } from "./core/database.js";
 import { canonicalUrl } from "./core/model.js";
+
 const library = openDatabase().then((db) => new Library(db));
+const DISCOVERY_ALARM = "folio:discovery";
+const DISCOVERY_STATE = "folio:discovery-state";
+const SIX_HOURS = 6 * 60;
+let discoveryRun = null;
+let offscreenOpening = null;
+
 const openLibrary = () =>
   chrome.tabs.create({ url: chrome.runtime.getURL("library.html") });
+
+function readerUrl(url, page = 1) {
+  const target = new URL(chrome.runtime.getURL("reader.html"));
+  target.searchParams.set("url", canonicalUrl(url));
+  if (Number.isInteger(page) && page > 1)
+    target.searchParams.set("page", String(page));
+  return target.href;
+}
+
+const openReader = (url, page = 1) =>
+  chrome.tabs.create({ url: readerUrl(url, page) });
+
+async function ensureDiscoveryAlarm(delayInMinutes = SIX_HOURS) {
+  const existing = await chrome.alarms.get(DISCOVERY_ALARM);
+  if (!existing)
+    chrome.alarms.create(DISCOVERY_ALARM, {
+      delayInMinutes,
+      periodInMinutes: SIX_HOURS,
+    });
+}
+
+async function ensureOffscreen() {
+  if (await chrome.offscreen.hasDocument()) return;
+  if (!offscreenOpening) {
+    offscreenOpening = chrome.offscreen
+      .createDocument({
+        url: "offscreen.html",
+        reasons: ["DOM_PARSER"],
+        justification:
+          "Parse source listing and title HTML for background discovery without opening source tabs.",
+      })
+      .finally(() => {
+        offscreenOpening = null;
+      });
+  }
+  await offscreenOpening;
+}
+
+async function discoveryStatus() {
+  const stored = await chrome.storage.local.get(DISCOVERY_STATE);
+  return (
+    stored[DISCOVERY_STATE] || {
+      running: false,
+      lastRunAt: null,
+      lastSuccessAt: null,
+      stats: null,
+      error: null,
+    }
+  );
+}
+
+async function writeDiscoveryState(patch) {
+  const current = await discoveryStatus();
+  const next = { ...current, ...patch };
+  await chrome.storage.local.set({ [DISCOVERY_STATE]: next });
+  return next;
+}
+
+async function runDiscovery({ manual = false } = {}) {
+  if (discoveryRun) return discoveryRun;
+  discoveryRun = (async () => {
+    const startedAt = Date.now();
+    await writeDiscoveryState({
+      running: true,
+      lastRunAt: startedAt,
+      error: null,
+    });
+    try {
+      const db = await library;
+      const [catalog, entries] = await Promise.all([
+        db.catalog(2500),
+        db.list(),
+      ]);
+      const now = Date.now();
+      const detailFreshMs = 7 * 24 * 60 * 60 * 1000;
+      const skipDetailIds = catalog
+        .filter(
+          (item) =>
+            item.detailObservedAt &&
+            now - item.detailObservedAt < detailFreshMs,
+        )
+        .map((item) => item.id);
+      const followedUrls = entries
+        .filter((entry) => entry.personal.following)
+        .map((entry) => entry.metadata.url)
+        .slice(0, 20);
+
+      await ensureOffscreen();
+      const response = await chrome.runtime.sendMessage({
+        type: "offscreen:discover",
+        options: {
+          roots: ["https://multporn.net/"],
+          maxListingPages: manual ? 6 : 4,
+          maxDetails: manual ? 18 : 12,
+          requestDelayMs: manual ? 250 : 400,
+          skipDetailIds,
+          followedUrls,
+        },
+      });
+      if (!response?.ok)
+        throw new Error(response?.error || "Background parser unavailable");
+
+      const { listings, details, followed, stats } = response.value;
+      if (listings.length) await db.observeCatalog(listings, false);
+      if (details.length) await db.observeCatalog(details, true);
+      for (const metadata of followed) {
+        try {
+          await db.save(metadata, true);
+        } catch {}
+      }
+      const state = await writeDiscoveryState({
+        running: false,
+        lastSuccessAt: Date.now(),
+        stats,
+        error: null,
+      });
+      return state;
+    } catch (error) {
+      await writeDiscoveryState({
+        running: false,
+        error: error.message,
+      });
+      throw error;
+    } finally {
+      discoveryRun = null;
+      if (await chrome.offscreen.hasDocument())
+        await chrome.offscreen.closeDocument().catch(() => {});
+    }
+  })();
+  return discoveryRun;
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  ensureDiscoveryAlarm(1).catch(() => {});
+});
+chrome.runtime.onStartup.addListener(() => {
+  ensureDiscoveryAlarm(5).catch(() => {});
+});
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === DISCOVERY_ALARM)
+    runDiscovery({ manual: false }).catch(() => {});
+});
+ensureDiscoveryAlarm().catch(() => {});
+
 chrome.action.onClicked.addListener(openLibrary);
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   (async () => {
@@ -17,6 +168,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
           "refresh",
           "progress",
           "open",
+          "openReader",
           "listingStatus",
           "saveListing",
           "observeCatalog",
@@ -24,18 +176,34 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       )
         throw new Error("Unsupported site action");
       if (
-        !["open", "listingStatus", "saveListing", "observeCatalog"].includes(
-          message.type,
-        ) &&
+        ![
+          "open",
+          "openReader",
+          "listingStatus",
+          "saveListing",
+          "observeCatalog",
+        ].includes(message.type) &&
         canonicalUrl(message.url || message.metadata?.url) !==
           canonicalUrl(sender.url)
       )
         throw new Error("Title does not match the current page");
     }
+
     if (message.type === "open") {
       await openLibrary();
       return null;
     }
+    if (message.type === "openReader") {
+      await openReader(
+        message.url || sender.url,
+        Number.isInteger(message.page) ? message.page : 1,
+      );
+      return null;
+    }
+    if (message.type === "runDiscovery")
+      return runDiscovery({ manual: message.manual !== false });
+    if (message.type === "discoveryStatus") return discoveryStatus();
+
     const db = await library;
     switch (message.type) {
       case "catalog":
