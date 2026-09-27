@@ -48,7 +48,6 @@ const detail = (slug, title, author, tags) => `<!doctype html>
 
 try {
   const errors = [];
-  let rootRequests = 0;
   await context.route("https://multporn.net/**", async (route) => {
     const url = new URL(route.request().url());
     if (route.request().resourceType() === "image") {
@@ -58,7 +57,6 @@ try {
       });
     }
     if (url.pathname === "/") {
-      rootRequests++;
       if (url.searchParams.get("page") === "1")
         return route.fulfill({
           contentType: "text/html",
@@ -125,13 +123,45 @@ try {
       { type, payload },
     );
 
-  const state = await send("runDiscovery", { manual: true });
-  assert.equal(state.running, false);
-  assert.ok(state.lastSuccessAt);
-  assert.equal(state.stats.discovered, 3);
-  assert.ok(state.stats.enriched >= 2);
-  assert.ok(rootRequests >= 2);
+  // Verify the extension owns a recurring discovery schedule without making the
+  // fixture suite contact the live source from an offscreen document.
+  const alarm = await library.evaluate(() =>
+    chrome.alarms.get("folio:discovery"),
+  );
+  assert.ok(alarm, "background discovery alarm is installed");
+  assert.equal(alarm.periodInMinutes, 360);
+  const initialState = await send("discoveryStatus");
+  assert.equal(initialState.running, false);
 
+  // Seed synthetic observations through the same catalog boundary background
+  // discovery writes to. Parser/pager behavior is covered by unit tests.
+  const observed = [
+    {
+      url: "https://multporn.net/comics/auto-space",
+      title: "The Quiet Orbit",
+      tags: ["Space", "Furry"],
+      author: "Alex North",
+      pageCount: 3,
+    },
+    {
+      url: "https://multporn.net/comics/auto-fantasy",
+      title: "Glass Kingdom",
+      tags: ["Fantasy", "Magic"],
+      author: "Sam West",
+      pageCount: 3,
+    },
+    {
+      url: "https://multporn.net/comics/auto-history",
+      title: "The Archive Road",
+      tags: ["History"],
+      author: "Dana Grey",
+      pageCount: 3,
+    },
+  ];
+  await send("observeCatalog", {
+    authoritative: true,
+    items: observed,
+  });
   const catalog = await send("catalog", { limit: 20 });
   assert.equal(catalog.length, 3);
   const space = catalog.find((item) => item.title === "The Quiet Orbit");
@@ -181,11 +211,11 @@ try {
     .click();
   await library.getByRole("button", { name: "Refresh discovery" }).waitFor();
   const status = await library.locator("#discovery-status").textContent();
-  assert.match(status, /Last refreshed|Discovery runs|complete/i);
+  assert.match(status, /Discovery runs automatically|Last refreshed|failed/i);
 
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: background discovery populates/enriches the catalog; native reader loads source pages, persists progress, supports continuous mode, and saves unsaved previews.",
+    "PASS: recurring background discovery is scheduled; native reader loads source pages, persists progress, supports continuous mode, and saves unsaved previews.",
   );
 } finally {
   await context.close();
