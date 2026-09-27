@@ -363,3 +363,76 @@ test("tags are validated, capped, preserved on listing saves and included in bac
   );
   assert.deepEqual((await legacy.get(title.url)).metadata.tags, []);
 });
+
+
+test("catalog observations are separate from the library and authoritative detail metadata wins", async () => {
+  const db = await library();
+  const observed = {
+    url: "https://multporn.net/comics/catalog-fixture",
+    title: "Catalog fixture",
+    pageCount: null,
+  };
+  await db.observeCatalog([observed], false);
+  await db.observeCatalog(
+    [
+      {
+        ...observed,
+        author: "Alex North",
+        tags: ["Space", "Furry"],
+        pageCount: 42,
+      },
+    ],
+    true,
+  );
+  // A later listing sighting knows less and must not erase detailed metadata.
+  await db.observeCatalog([observed], false);
+  let item = (await db.catalog()).find((value) => value.id === observed.url);
+  assert.equal(item.author, "Alex North");
+  assert.deepEqual(item.tags, ["Space", "Furry"]);
+  assert.equal(item.pageCount, 42);
+  assert.ok(item.detailObservedAt);
+
+  // An authoritative detail refresh is allowed to explicitly clear stale fields.
+  await db.observeCatalog(
+    [{ ...observed, author: "", tags: [], pageCount: null }],
+    true,
+  );
+  item = (await db.catalog()).find((value) => value.id === observed.url);
+  assert.equal(item.author, "");
+  assert.deepEqual(item.tags, []);
+  assert.equal(item.pageCount, null);
+});
+
+test("saving an observed catalog title removes it from candidates and removing it makes it eligible again", async () => {
+  const db = await library();
+  const observed = {
+    url: "https://multporn.net/comics/discovery-fixture",
+    title: "Discovery fixture",
+    tags: ["Space"],
+    author: "Alex North",
+  };
+  await db.observeCatalog([observed], true);
+  assert.equal(
+    (await db.catalog()).some((value) => value.id === observed.url),
+    true,
+  );
+  await db.save(observed);
+  assert.equal(
+    (await db.catalog()).some((value) => value.id === observed.url),
+    false,
+  );
+  await db.remove(observed.url);
+  assert.equal(
+    (await db.catalog()).some((value) => value.id === observed.url),
+    true,
+  );
+});
+
+test("saved metadata distinguishes omitted tags from an authoritative empty tag list", async () => {
+  const db = await library();
+  await db.save({ ...title, tags: ["Space", "Furry"] });
+  await db.save(title);
+  assert.deepEqual((await db.get(title.url)).metadata.tags, ["Space", "Furry"]);
+  await db.save({ ...title, tags: [] }, true);
+  assert.deepEqual((await db.get(title.url)).metadata.tags, []);
+});

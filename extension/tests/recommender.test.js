@@ -33,164 +33,107 @@ const entry = (slug, tags, options = {}) => ({
     }),
   },
 });
+const candidate = (slug, tags, options = {}) => ({
+  ...metadata({
+    url: url(slug),
+    title: slug,
+    tags,
+    author: options.author,
+    pageCount: options.pageCount,
+  }),
+  firstSeenAt: 1,
+  lastSeenAt: 2,
+  detailObservedAt: 2,
+});
 const order = (results) => [...results.keys()];
 
-test("library records map onto recommender items and carry the inferred signals", () => {
-  const reading = signals(
-    entry("reading-title", ["Space", "Furry"], {
-      status: "reading",
-      page: 4,
-      favorite: true,
-      author: "Alex North, Sam West",
-    }),
-  );
-  assert.deepEqual(reading.item, {
-    id: url("reading-title"),
-    title: "reading-title",
-    tags: ["Space", "Furry"],
-    authors: ["Alex North", "Sam West"],
-    saved: true,
-    liked: true,
-    dismissed: false,
-  });
-  assert.equal(reading.feedback, 1);
-  assert.equal(inferredFeedback({ status: "finished", page: 0 }), 1);
-  assert.equal(inferredFeedback({ status: "reading", page: 0 }), null);
-  assert.equal(inferredFeedback({ status: "dropped", page: 9 }), null);
-  assert.equal(
-    signals(entry("dropped-title", ["Space"], { status: "dropped" })).item
-      .dismissed,
-    true,
-  );
-});
-
-test("ranking covers the library, explains each position, and drops dismissed titles", () => {
+test("library state becomes profile evidence while only unsaved catalog titles are candidates", () => {
   const engine = createRecommendationEngine({ storage: store() });
-  const finished = entry("known-long", ["space", "furry"], {
+  const seed = entry("read-space", ["space", "furry"], {
     status: "finished",
-    page: 40,
+    page: 30,
+    author: "Alex North",
   });
-  const dropped = entry("dropped", ["space"], { status: "dropped" });
-  const entries = [
-    finished,
-    entry("known-short", ["space", "furry"]),
-    entry("known-weak", ["space"]),
-    entry("f1", ["fantasy"]),
-    entry("f2", ["fantasy"]),
-    dropped,
-  ];
-  const results = engine.update(entries);
-  assert.equal(results.size, 5, "a dismissed title is not recommended");
-  assert.ok(!results.has(dropped.metadata.id));
-  assert.equal(
-    order(results)[0],
-    finished.metadata.id,
-    "the title with the strongest engagement leads",
-  );
-  for (const result of results.values()) {
-    assert.ok(Number.isFinite(result.score));
-    assert.equal(typeof result.explanations[0], "string");
-    assert.ok(result.explanations[0].length > 0);
-  }
-  const again = createRecommendationEngine({ storage: store() });
-  assert.deepEqual(order(again.update(entries)), order(results));
+  const close = candidate("new-space", ["space", "furry"], {
+    author: "Alex North",
+  });
+  const far = candidate("new-fantasy", ["fantasy"]);
+  const results = engine.update([seed], [far, close]);
+  assert.equal(results.size, 2);
+  assert.ok(!results.has(seed.metadata.id));
+  assert.equal(order(results)[0], close.id);
+  assert.equal(signals(seed).item.saved, true);
+  assert.equal(signals(seed).item.engagement, 1);
+  assert.equal(inferredFeedback(seed.personal), 1);
 });
 
-test("explore trades tag affinity for variety and remembers where it was left", () => {
+test("explicit preference history survives the source title leaving the library", () => {
   const storage = store();
+  const seed = entry("seed", ["space", "furry"], {
+    status: "finished",
+    page: 20,
+  });
+  const close = candidate("close", ["space", "furry"]);
+  const far = candidate("far", ["history"]);
   const engine = createRecommendationEngine({ storage });
-  const entries = [
-    entry("known", ["space", "furry"], { status: "finished", page: 40 }),
-    entry("familiar", ["space", "furry"]),
-    entry("adventurous", ["pirates", "steampunk"]),
-  ];
-  assert.equal(engine.explore(), 0.25);
-  let results = engine.update(entries);
-  const comfortable = order(results);
-  const comfortableScore = results.get(url("known")).score;
-  assert.equal(comfortable[0], url("known"));
-  assert.equal(
-    comfortable[1],
-    url("familiar"),
-    "the similar title follows at the default position",
-  );
-  engine.setExplore(0.9);
-  results = engine.results();
-  assert.equal(order(results)[0], url("known"));
-  assert.equal(
-    order(results)[1],
-    url("adventurous"),
-    "exploring promotes the dissimilar title instead",
-  );
-  assert.ok(
-    results.get(url("known")).score < comfortableScore,
-    "affinity is damped as explore rises",
-  );
+  engine.update([seed], [close, far]);
+  engine.rate(seed.metadata, 1);
+
   const reopened = createRecommendationEngine({ storage });
-  assert.equal(reopened.explore(), 0.9);
-  assert.deepEqual(order(reopened.update(entries)), order(results));
-  assert.throws(() => engine.setExplore(2), RangeError);
+  const results = reopened.update([], [far, close]);
+  assert.equal(reopened.rating(seed.metadata.id), 1);
+  assert.equal(order(results)[0], close.id);
+  assert.equal(
+    JSON.parse(storage.getItem(STORAGE_KEY)).observations[0].saved,
+    false,
+    "explicit history is not tied to current library membership",
+  );
 });
 
-test("explicit feedback moves scores, reaches shared tags, and can be cleared", () => {
+test("explicit candidate feedback persists across save-like candidate removal", () => {
+  const storage = store();
+  const target = candidate("target", ["fantasy"]);
+  const sibling = candidate("sibling", ["fantasy"]);
+  const engine = createRecommendationEngine({ storage });
+  engine.update([], [target, sibling]);
+  engine.rate(target, 1);
+  assert.equal(engine.rating(target.id), 1);
+
+  const reopened = createRecommendationEngine({ storage });
+  reopened.update(
+    [entry("target", ["fantasy"], { status: "planned" })],
+    [target, sibling],
+  );
+  assert.ok(!reopened.results().has(target.id), "saved title is no longer a candidate");
+  assert.equal(reopened.rating(target.id), 1, "explicit preference is retained");
+});
+
+test("dismissal is a hard candidate exclusion and can be restored", () => {
   const engine = createRecommendationEngine({ storage: store() });
-  const entries = [
-    entry("a", ["space"]),
-    entry("b", ["space"]),
-    entry("c", ["fantasy"]),
-    entry("d", ["fantasy"]),
-  ];
-  const baseline = new Map(engine.update(entries));
-  const target = entries[2];
-  assert.equal(engine.rating(target.metadata.id), null);
-  engine.rate(target, 1);
-  assert.equal(engine.rating(target.metadata.id), 1);
-  assert.ok(
-    engine.results().get(target.metadata.id).score >
-      baseline.get(target.metadata.id).score,
-    "a positive choice raises the title",
-  );
-  engine.rate(target, -1);
-  assert.ok(
-    engine.results().get(target.metadata.id).score <
-      baseline.get(target.metadata.id).score,
-  );
-  assert.ok(
-    engine.results().get(url("d")).score < baseline.get(url("d")).score,
-    "negative evidence reaches a sibling sharing the tag",
-  );
-  assert.ok(
-    engine.results().has(target.metadata.id),
-    "a dislike lowers the score, it is not an exclusion",
-  );
-  engine.rate(target, null);
-  assert.equal(engine.rating(target.metadata.id), null);
-  assert.equal(
-    engine.results().get(target.metadata.id).score,
-    baseline.get(target.metadata.id).score,
-    "clearing restores the inferred ranking exactly",
-  );
+  const a = candidate("a", ["space"]);
+  const b = candidate("b", ["fantasy"]);
+  engine.update([], [a, b]);
+  engine.dismiss(a.id);
+  assert.equal(engine.isDismissed(a.id), true);
+  assert.ok(!engine.results().has(a.id));
+  engine.setExplore(1);
+  assert.ok(!engine.results().has(a.id));
+  engine.restore(a.id);
+  assert.equal(engine.isDismissed(a.id), false);
+  assert.ok(engine.results().has(a.id));
 });
 
-test("explicit choices survive a reload and outrank the inferred flags", () => {
+test("explicit choices survive reload and clearing removes only that choice", () => {
   const storage = store();
-  const target = entry("target", ["fantasy"]);
-  const entries = [entry("space", ["space"]), target];
+  const target = candidate("target", ["fantasy"]);
   const engine = createRecommendationEngine({ storage });
-  engine.update(entries);
-  engine.rate(target, 1);
-  const scored = engine.results().get(target.metadata.id).score;
+  engine.update([], [target]);
+  engine.rate(target, -1);
   const reopened = createRecommendationEngine({ storage });
-  assert.equal(reopened.rating(target.metadata.id), 1);
-  reopened.update(entries);
-  assert.equal(reopened.results().get(target.metadata.id).score, scored);
+  reopened.update([], [target]);
+  assert.equal(reopened.rating(target.id), -1);
   reopened.rate(target, null);
-  assert.equal(reopened.rating(target.metadata.id), null);
-  assert.equal(
-    createRecommendationEngine({ storage }).rating(target.metadata.id),
-    null,
-    "clearing is persisted too",
-  );
+  assert.equal(createRecommendationEngine({ storage }).rating(target.id), null);
 });
 
 test("a broken, future, or unwritable profile surfaces instead of resetting silently", () => {
@@ -211,53 +154,27 @@ test("a broken, future, or unwritable profile surfaces instead of resetting sile
     throw new Error("QuotaExceededError");
   };
   const blockedEngine = createRecommendationEngine({ storage: blocked });
-  blockedEngine.update([entry("a", ["space"])]);
-  assert.throws(() => blockedEngine.rate(entry("a", ["space"]), 1), /Quota/);
-  assert.equal(
-    blockedEngine.rating(url("a")),
-    null,
-    "a failed write leaves the in-memory profile unchanged",
+  blockedEngine.update([], [candidate("a", ["space"])]);
+  assert.throws(
+    () => blockedEngine.rate(candidate("a", ["space"]), 1),
+    /Quota/,
   );
-  const offline = createRecommendationEngine();
-  assert.equal(
-    offline.update([entry("a", ["space"]), entry("b", ["space"])]).size,
-    2,
-  );
-  assert.equal(offline.update([]).size, 0);
+  assert.equal(blockedEngine.rating(url("a")), null);
 });
 
-test("metadata is never a scoring feature", () => {
-  const engine = createRecommendationEngine({ storage: store() });
-  const results = engine.update([
-    entry("space-title", ["space"]),
-    entry("other-title", ["space"]),
-  ]);
-  const explanation = results.get(url("space-title")).explanations.join(" ");
-  assert.match(explanation, /space/);
-  assert.doesNotMatch(explanation, /other-title/);
-});
-
-test("records without usable metadata are skipped", () => {
-  const engine = createRecommendationEngine({ storage: store() });
-  assert.deepEqual(
-    order(
-      engine.update([{ metadata: null }, undefined, entry("a", ["space"])]),
-    ),
-    [url("a")],
-  );
-});
-
-test("async ranking cannot replace newer results with an obsolete response", async () => {
+test("async ranking cannot replace newer candidate results with an obsolete response", async () => {
   const jobs = [];
   const engine = createRecommendationEngine({
     rank: (items, profile) =>
       new Promise((resolve) => jobs.push({ items, profile, resolve })),
   });
-  const old = engine.update([entry("old", ["fiction"])]);
-  const latest = engine.update([
-    entry("new", ["fantasy"], { status: "finished" }),
-  ]);
-  assert.equal(jobs[1].profile.observations[0].feedback, 1);
+  const old = engine.update([], [candidate("old", ["fiction"])]);
+  const latest = engine.update(
+    [entry("seed", ["fantasy"], { status: "finished" })],
+    [candidate("new", ["fantasy"])],
+  );
+  assert.equal(jobs[1].profile.observations[0].engagement, 1);
+  assert.equal(jobs[1].profile.observations[0].feedback, null);
   jobs[1].resolve([
     { item: jobs[1].items[0], score: 1, explanations: ["New"] },
   ]);
@@ -269,18 +186,26 @@ test("async ranking cannot replace newer results with an obsolete response", asy
   assert.deepEqual([...engine.results().keys()], [url("new")]);
 });
 
-test("600 engaged titles rank within a generous interactive budget", () => {
-  const entries = Array.from({ length: 600 }, (_, i) =>
-    entry(`book-${i}`, ["fiction", `genre-${i % 12}`, `topic-${i % 25}`], {
+test("600 unsaved candidates rank within a generous local budget", () => {
+  const library = [
+    entry("seed", ["fiction", "genre-1", "topic-1"], {
       status: "finished",
-      author: `Author ${i % 40}`,
+      favorite: true,
+      author: "Author 1",
     }),
+  ];
+  const candidates = Array.from({ length: 600 }, (_, i) =>
+    candidate(
+      `book-${i}`,
+      ["fiction", `genre-${i % 12}`, `topic-${i % 25}`],
+      { author: `Author ${i % 40}` },
+    ),
   );
   const engine = createRecommendationEngine();
   const start = performance.now();
-  assert.equal(engine.update(entries).size, 600);
+  assert.equal(engine.update(library, candidates).size, 600);
   assert.ok(
     performance.now() - start < 2000,
-    "600 titles should take under 2s; the previous cubic scan took ~10s",
+    "600 candidates should remain practical even without the UI worker",
   );
 });

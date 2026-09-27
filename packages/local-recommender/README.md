@@ -74,6 +74,7 @@ document.body.append(slider.element);
 
 Items require unique, nonempty string `id` and string `title`. `authors` and `tags`
 default to empty arrays; `saved`, `liked`, and `dismissed` default to false. Optional
+`engagement` is a number from 0 through 1 for inferred host activity such as reading. Optional
 `metadata` is returned unchanged with the original item. Tags/authors are trimmed,
 Unicode NFKC normalized, lowercased, deduplicated, and sorted. IDs remain exact and
 case-sensitive. Unknown vocabulary is valid; no synonyms or domain assumptions exist.
@@ -96,8 +97,9 @@ all its tags are present. Exclusions and dismissals apply at every slider positi
 
 ## Scoring and explanations
 
-- Inferred signal weight: saved = +1, liked = +3, dismissed = -3. Flags do not add
-  together. Explicit feedback overrides saved/liked with -3, 0, or +3; dismissal wins.
+- Signal strength is ordered intentionally: saved = +1, inferred engagement = +1..+2,
+  liked/favorite = +3, and explicit feedback = -4/0/+4. Explicit feedback overrides
+  inferred state; dismissal is a hard filter.
 - Each tag, unordered tag pair, and author accumulates signed weights. Affinity is
   `sum(weights) / (sum(abs(weights)) + 2)`, providing bounded values and smoothing
   sparse evidence. All unordered pairs are learned, not larger combinations.
@@ -148,20 +150,12 @@ npm run test:recommender
 npm run check
 ```
 
-The module is bundled into the Folio library page and drives its **For you** shelf
-through `extension/src/core/recommender.js`, which owns the record mapping, the
-profile rebuild, and the `folio:recommender` store. The package itself still imports
-none of the host's models, database, or UI.
+Folio uses this package with two distinct inputs: its personal library becomes profile
+observations, while a separate local catalog supplies unsaved candidates. Explicit
+feedback snapshots are persisted independently of current library membership, so a
+later save/remove transition does not erase taste history. Ranking runs in a worker;
+the package itself remains unaware of Folio's source, database, and UI.
 
-Mounting notes from that integration, useful for other hosts:
-
-- Ranking a library means every candidate is also a saved observation, so the
-  novelty term contributes nothing there; exploration then acts through the
-  diversity penalty and affinity damping. Novelty matters only when candidates
-  contain features absent from all training signals.
-- Only explicit choices and the slider position are worth persisting. Inferred
-  flags change on their own, so Folio keeps them out of the stored profile and
-  rebuilds them from the library on each visit.
-- Dismissals are hard filters at every slider position. A host that wants a
-  "show me everything" view must keep dismissed records out of the candidate list
-  it passes to `recommend`.
+Hosts should keep inferred engagement separate from explicit feedback, keep dismissals
+as hard exclusions, and preserve candidate/profile separation if they want Explore's
+novelty term to be meaningful.

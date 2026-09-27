@@ -450,3 +450,36 @@ test("incremental diversity matches a full-prefix reference scan", () => {
       assert.ok(Math.abs(actual[i].score - expected[i].score) < 1e-12);
   }
 });
+
+
+test("signal strength is explicit preference > favorite > engagement > saved", () => {
+  const candidate = book("candidate", ["space"]);
+  const score = (profile) =>
+    recommend([candidate], profile, { explore: 0 })[0].score;
+  const saved = score(
+    createProfile([book("saved", ["space"], { saved: true })]),
+  );
+  const engaged = score(
+    createProfile([
+      book("engaged", ["space"], { saved: true, engagement: 1 }),
+    ]),
+  );
+  const favorite = score(
+    createProfile([book("favorite", ["space"], { liked: true })]),
+  );
+  const explicit = score(
+    withFeedback(createProfile(), book("explicit", ["space"]), 1),
+  );
+  assert.ok(engaged > saved);
+  assert.ok(favorite > engaged);
+  assert.ok(explicit > favorite);
+
+  const negative = score(
+    withFeedback(
+      createProfile([book("liked", ["space"], { liked: true })]),
+      book("liked", ["space"], { liked: true }),
+      -1,
+    ),
+  );
+  assert.ok(negative < 0, "explicit dislike overcomes inferred positive state");
+});

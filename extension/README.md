@@ -57,21 +57,21 @@ Reload the unpacked extension, then reload the library and source tabs. Version 
 
 ## Recommendations (0.5.0)
 
-**For you** is a special shelf in the sidebar that ranks your own library with the standalone `packages/local-recommender` package, with ranking computed in a dedicated background worker.
+**For you** is a discovery shelf, not a sort mode for the existing library. Folio keeps two separate local datasets:
 
-- **Signals.** Every saved title is a signal. Favorites count as likes; a finished title, or one you have started, is positive feedback; a **dropped** title counts as a dismissal and is left off the shelf. Nothing is inferred from the source website, and metadata such as the title or description is never scored.
-- **Tags.** Ranking is mostly tag driven, so a title's source tags are now read from its page and stored with the record when you use **Refresh details** or **Check for updates**. Titles saved before 0.5.0 carry no tags until you refresh them once; the metadata store is schemaless, so there is no migration to run, and a listing save never erases tags a refresh already found.
-- **Explicit feedback.** Each card on the shelf offers **More like this** and **Less like this**. The choice reranks the shelf immediately and is kept; choosing the active one again clears it so the inferred signals apply again.
-- **Explore.** The shelf's slider trades tag affinity for variety, and remembers where it was left.
-- **Storage.** Preferences live in this browser's `localStorage` under `folio:recommender`. Only the slider position and your explicit choices are stored; everything else is rebuilt from the library on every visit, so changing a status can never leave a stale weight behind.
-- **Backups.** Library records now export as format version 3, which adds tags. Versions 1 and 2 still import. Recommendation preferences stay on this browser and are not part of a backup, like the appearance settings.
+- **Library observations** train the taste profile. Merely saving is weak evidence; reading/finishing is stronger, favorites are stronger again, and explicit **More like this / Less like this** choices are strongest.
+- **Catalog observations** are unsaved titles seen on source listing/detail pages. Listing scans record candidates without adding them to the personal library. Detail visits store authoritative tags/authors, and opening For You performs a small, rate-limited enrichment pass for candidates still missing detail metadata.
+- **Candidates stay unsaved.** The ranking worker receives the personal library as profile evidence and the unsaved local catalog as candidates. Saved titles are never returned as recommendations.
+- **Familiar ↔ Explore** trades close tag/author/combination affinity for novelty and slate diversity while retaining hard exclusions and negative evidence.
+- **Feedback persists independently of library membership.** Saving or later removing a title does not erase an explicit taste choice. **Hide** is a hard candidate dismissal; **Less like this** is negative preference evidence and is intentionally different.
+- **Storage stays local.** The catalog is bounded to 2,500 passive observations. Recommendation preferences are stored in `localStorage`; catalog/library metadata live in IndexedDB. The worker keeps ranking off the UI thread and stale jobs are cancelled.
 
-Known limits: the recommender's novelty bonus never applies here, because every candidate is itself a library title and therefore already a known tag — Explore works through its diversity penalty and affinity damping instead. Tag extraction reads validated `/category/` and `/tag/` links only inside explicit `field-name-field-tags` blocks; if that markup changes, the shelf simply has less to work with, and no other page content is stored. Scores are relative ranking values within your own library, not grades or predictions.
+Tag extraction accepts only explicit title tag fields. Passive listing observations never erase richer detail metadata; an authoritative detail observation may intentionally replace fields with empty values when the source really reports none.
 
 ## Architecture
 
 - `src/core/model.js`: validated records and versioned backup format.
-- `src/core/database.js`: IndexedDB schema migrations and atomic storage operations. The `personal` store owns reading state and collections; the separate `metadata` store owns observations from the source. Metadata refresh never overwrites personal data.
+- `src/core/database.js`: IndexedDB schema migrations and atomic storage operations. `personal` owns reading state, `metadata` owns saved-title source metadata, and `catalog` owns bounded unsaved discovery observations.
 - `src/core/recommender.js`: the Folio side of the local recommender. Maps library records to ranking items, rebuilds the profile from the library plus the stored explicit choices, and owns the `folio:recommender` profile store.
 - `packages/local-recommender/`: the standalone, dependency-free ranking package. Used by `ranking-worker.js`; it still knows nothing about Folio's models or database.
 - `src/adapters/multporn.js`: detail-page detection, source tag extraction, and continuous-reader image mapping.
@@ -84,7 +84,7 @@ Known limits: the recommender's novelty bonus never applies here, because every 
 - `src/ui/update-checker.js`: same-host, timeout-bounded HTML fetches parsed into inert templates; redirects are rejected, and source scripts are not executed.
 - `src/ui/`: full-page library. All supplied titles and collection names are rendered as text.
 
-Schema version 1 creates both stores; version 2 migrates personal records and initializes known page-count baselines. Future schema migrations belong in `onupgradeneeded`; unknown future backup versions are rejected. Writes resolve after transaction commit. Concurrent record edits perform their read/modify/write in the same transaction. The database is still at version 2: tags are additive fields on existing metadata records, so nothing has to be migrated and older records gain them when they are next refreshed.
+Schema version 1 creates the saved metadata/personal stores; version 2 migrates personal records and initializes known page-count baselines; version 3 adds the separate unsaved `catalog` store. Future schema migrations belong in `onupgradeneeded`; unknown future backup versions are rejected. Writes resolve after transaction commit.
 
 The extension requests host access only to `https://multporn.net/*` for source metadata checks. It requests no tabs permission or access to other sites. Its declared content scripts run only on `https://multporn.net/*`. Cover artwork loads only when the optional artwork toggle is enabled. The library remains usable offline with typographic jackets.
 
@@ -103,14 +103,14 @@ Run the opt-in live probe with `npm run test:live`. It creates a disposable brow
 
 ## Scope and next steps
 
-This release covers discovery, personal organization, reading, manual update checks, and ranking your own library. Legacy cache import, catalog ranking (recommending titles you have not saved yet), custom reader controls, scheduled checking, automatic backup, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.
+This release covers local unsaved-title discovery, personal organization, reading, and manual update checks. Legacy cache import, custom reader controls, scheduled checking, automatic backup, and synchronization remain future work. The original userscript and its tests remain available at the project root. Its count cache contains observations, not saved-library choices, so it is not silently converted into personal records.
 
 ### Ranking responsiveness and tag boundaries
 
 Ranking runs in a module worker, so library rendering and editing do not wait for
 it. New requests terminate obsolete workers, and stale responses cannot replace
-newer results. Diversity selection caches the maximum similarity to previous picks
-instead of rescanning the whole prefix. Engagement feedback is applied in one pass.
+newer results. The profile and candidate pool are separate: saved/read titles train
+taste, while unsaved catalog observations are ranked for discovery.
 
 Tag extraction accepts only explicit `field-name-field-tags` fields in the current
 title container when available. Navigation, sidebars, related listings, external
