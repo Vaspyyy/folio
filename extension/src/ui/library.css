@@ -1525,6 +1525,22 @@ progress::-moz-progress-bar {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+.discovery-actions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+#refresh-discovery {
+  flex: 0 0 auto;
+}
+#discovery-status,
+#ranking-status {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.5;
+}
 .why {
   margin-top: 11px;
   padding-top: 11px;
