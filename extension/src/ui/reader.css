@@ -1,0 +1,89 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #0d1714;
+  color: #edf2e8;
+  --bar: #14231e;
+  --line: #2d433a;
+  --muted: #9aaca2;
+  --accent: #c6cf9b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: #0d1714; }
+body { padding: 78px 0 74px; }
+button, select, input { font: inherit; color: inherit; }
+button, select {
+  border: 1px solid #3b5148;
+  background: #1d3029;
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+button, select, input[type="range"] { cursor: pointer; }
+button:hover { background: #294239; }
+a { color: inherit; text-decoration: none; }
+.reader-bar {
+  position: fixed; inset: 0 0 auto 0; height: 78px; z-index: 20;
+  display: flex; align-items: center; gap: 18px;
+  padding: 12px 18px; background: #14231ef2;
+  backdrop-filter: blur(16px); border-bottom: 1px solid var(--line);
+}
+.brand {
+  width: 42px; height: 42px; display: grid; place-items: center;
+  border: 1px solid #71816b; border-radius: 45% 45% 5px 5px;
+  font: italic 29px Georgia, serif; color: #e1d9ad;
+}
+.reader-title { min-width: 0; display: grid; gap: 2px; margin-right: auto; }
+.reader-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-title > span:last-child { color: var(--muted); font-size: 11px; }
+.eyebrow { font-size: 8px; letter-spacing: 1.8px; color: #9baa86; }
+.reader-controls { display: flex; align-items: end; gap: 9px; }
+.reader-controls label { display: grid; gap: 3px; font-size: 9px; color: var(--muted); }
+.reader-controls select { min-width: 90px; }
+#zoom { width: 110px; }
+.state {
+  min-height: calc(100vh - 152px); display: grid; place-content: center;
+  justify-items: center; text-align: center; padding: 40px 20px;
+}
+.state h1 { font: 32px Georgia, serif; margin: 18px 0 8px; }
+.state p { color: var(--muted); max-width: 540px; line-height: 1.7; }
+.spinner {
+  width: 28px; height: 28px; border: 2px solid #32473e;
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.button { display: inline-block; border: 1px solid #4d6458; border-radius: 7px; padding: 10px 14px; margin-top: 12px; }
+.stage { min-height: calc(100vh - 152px); display: grid; justify-items: center; align-content: start; gap: 18px; padding: 18px; }
+.page {
+  display: block; max-width: 100%; height: auto; background: #111;
+  box-shadow: 0 16px 50px #0007;
+}
+.stage[data-fit="width"] .page { width: min(calc(var(--zoom, 1) * 100%), 1600px); height: auto; }
+.stage[data-fit="height"] .page { width: auto; height: calc((100vh - 190px) * var(--zoom, 1)); max-height: none; }
+.stage[data-fit="natural"] .page { width: auto; height: auto; max-width: none; transform: scale(var(--zoom, 1)); transform-origin: top center; margin-bottom: calc((var(--zoom, 1) - 1) * 20vh); }
+.stage[data-mode="paged"] { align-content: center; }
+.page-shell { display: grid; justify-items: center; width: 100%; scroll-margin-top: 94px; }
+.page-number { color: #6f8278; font-size: 10px; margin-top: 7px; }
+.reader-footer {
+  position: fixed; inset: auto 0 0 0; min-height: 74px; z-index: 20;
+  display: grid; grid-template-columns: auto minmax(180px, 420px) auto auto;
+  align-items: center; justify-content: center; gap: 12px;
+  padding: 12px 18px; background: #14231ef2;
+  backdrop-filter: blur(16px); border-top: 1px solid var(--line);
+}
+.reader-position { display: grid; gap: 6px; text-align: center; font-size: 11px; color: var(--muted); }
+progress { width: 100%; height: 4px; accent-color: #9eaa78; }
+#save[aria-pressed="true"] { background: #334d3f; color: #dce5c5; }
+@media (max-width: 780px) {
+  body { padding-top: 124px; }
+  .reader-bar { height: 124px; flex-wrap: wrap; align-content: center; }
+  .reader-title { max-width: calc(100vw - 84px); }
+  .reader-controls { width: 100%; overflow-x: auto; }
+  .reader-controls label { flex: 0 0 auto; }
+  .reader-footer { grid-template-columns: auto 1fr auto; }
+  #save { grid-column: 1 / -1; grid-row: 2; }
+  .stage[data-fit="height"] .page { max-width: 100%; height: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}

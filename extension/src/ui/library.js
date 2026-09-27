@@ -8,6 +8,14 @@ import { readingProgress, continueReading } from "./presentation.js";
 import { createWorkspace } from "./workspace.js";
 import { createWorkerRanker } from "./ranking-client.js";
 import { fetchDiscoveryMetadata } from "./update-checker.js";
+
+function nativeReaderHref(url, page = 1) {
+  const target = new URL(chrome.runtime.getURL("reader.html"));
+  target.searchParams.set("url", url);
+  if (Number.isInteger(page) && page > 1)
+    target.searchParams.set("page", String(page));
+  return target.href;
+}
 let workspace;
 const $ = (id) => document.getElementById(id);
 const labels = {
@@ -145,13 +153,10 @@ function readLink(entry, className = "read") {
   const link = node("a", label, className);
   link.append(node("span", "↗"));
   link.lastChild.setAttribute("aria-hidden", "true");
-  link.href =
-    m.url +
-    (p.status === "finished"
-      ? "#folio-page=1"
-      : p.page
-        ? `#folio-page=${p.page}`
-        : "");
+  link.href = nativeReaderHref(
+    m.url,
+    p.status === "finished" ? 1 : p.page || 1,
+  );
   link.target = "_blank";
   link.rel = "noreferrer";
   return link;
@@ -514,13 +519,15 @@ function renderRecommended() {
       art(entry),
       node("span", "Discovery", "status-pill"),
     );
-    coverLink.setAttribute("aria-label", `Open ${metadata.title}`);
-    coverLink.onclick = () => chrome.tabs.create({ url: metadata.url });
+    coverLink.setAttribute("aria-label", `Read ${metadata.title} in Folio`);
+    coverLink.onclick = () =>
+      chrome.tabs.create({ url: nativeReaderHref(metadata.url) });
 
     const body = node("div", undefined, "card-body"),
       heading = node("h3"),
       titleButton = node("button", metadata.title, "title-button");
-    titleButton.onclick = () => chrome.tabs.create({ url: metadata.url });
+    titleButton.onclick = () =>
+      chrome.tabs.create({ url: nativeReaderHref(metadata.url) });
     heading.append(titleButton);
     const metaParts = [];
     if (metadata.author) metaParts.push(metadata.author);
@@ -545,17 +552,16 @@ function renderRecommended() {
     body.append(why(metadata));
 
     const footer = node("footer"),
+      read = node("a", "Read in Folio ↗", "read"),
       save = node("button", "Save to library", "read"),
-      open = node("a", "Open source ↗", "read"),
       hide = node("button", "Hide", "remove");
+    read.href = nativeReaderHref(metadata.url);
+    read.target = "_blank";
     save.type = "button";
     save.onclick = () => saveRecommendation(metadata);
-    open.href = metadata.url;
-    open.target = "_blank";
-    open.rel = "noreferrer";
     hide.type = "button";
     hide.onclick = () => dismissRecommendation(metadata);
-    footer.append(save, open, hide);
+    footer.append(read, save, hide);
     body.append(footer);
     card.append(coverLink, body);
     $("entries").append(card);
@@ -812,6 +818,38 @@ const explore = createExploreSlider({
   },
 });
 $("explore").append(explore.element);
+
+async function updateDiscoveryStatus() {
+  try {
+    const state = await request("discoveryStatus");
+    if (state.running)
+      $("discovery-status").textContent = "Background discovery is running…";
+    else if (state.error)
+      $("discovery-status").textContent = `Last discovery failed: ${state.error}`;
+    else if (state.lastSuccessAt)
+      $("discovery-status").textContent =
+        `Last refreshed ${new Date(state.lastSuccessAt).toLocaleString()} · ${state.stats?.discovered ?? 0} titles seen.`;
+    else
+      $("discovery-status").textContent =
+        "Discovery runs automatically every six hours.";
+  } catch {}
+}
+$("refresh-discovery").onclick = async () => {
+  $("refresh-discovery").disabled = true;
+  $("discovery-status").textContent = "Discovering new titles in the background…";
+  try {
+    const state = await request("runDiscovery", { manual: true });
+    $("discovery-status").textContent =
+      `Discovery complete · ${state.stats?.discovered ?? 0} titles seen, ${state.stats?.enriched ?? 0} enriched.`;
+    await refresh();
+  } catch (error) {
+    $("discovery-status").textContent = error.message;
+  } finally {
+    $("refresh-discovery").disabled = false;
+  }
+};
+updateDiscoveryStatus();
+
 $("collection").addEventListener("input", () => {
   if ($("collection").value) $("sort").value = "manual";
   render();
