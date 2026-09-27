@@ -7,6 +7,7 @@ const readerHref = (url, page = 1) => {
   target.searchParams.set("url", url);
   if (Number.isInteger(page) && page > 1)
     target.searchParams.set("page", String(page));
+  target.hash = `folio-page=${Math.max(1, Number(page) || 1)}`;
   return target.href;
 };
 const el = (tag, text, cls) => {
