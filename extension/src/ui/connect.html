@@ -16,23 +16,78 @@
         reading position travel privately between your devices.
       </p>
       <section>
-        <h2>Connect your library</h2>
-        <label
-          >Relay address<input
-            id="relay"
-            type="url"
-            placeholder="https://sync.example.com" /></label
-        ><button id="create">Create private library</button>
-        <p>Already paired another device?</p>
-        <label
-          >Pairing code<textarea
-            id="join-code"
-            rows="4"
-            placeholder="folio1.…"
-            spellcheck="false"
-          ></textarea></label
-        ><button id="join">Pair this computer</button>
+        <div id="unpaired">
+          <h2>Connect this computer to your phone</h2>
+          <p>
+            Folio uses a small helper on your computer to keep your devices in
+            sync. There is no hosted Folio sync service yet.
+          </p>
+          <button id="connect-computer">Connect this computer</button>
+          <details id="computer-help">
+            <summary>First time? Start the computer helper</summary>
+            <ol>
+              <li>
+                On this computer, open a terminal in the Folio project folder.
+              </li>
+              <li>
+                Run <code>npm run sync:computer</code> and leave it running.
+              </li>
+              <li>
+                Choose <strong>Connect this computer</strong> above. Allow the
+                browser's request to connect to the helper.
+              </li>
+              <li>
+                Copy the pairing code that appears. On your phone, open
+                <strong>Devices</strong>, paste it, and choose
+                <strong>Pair this device</strong>.
+              </li>
+            </ol>
+            <p>
+              Use the same Wi-Fi on your computer and phone. The debug Android
+              app supports this local connection. Sync works while the computer
+              helper is running; downloaded stories still work without it. A
+              release app or syncing across different networks needs an HTTPS
+              server.
+            </p>
+            <p>
+              Your browser cannot start the helper itself. A packaged desktop
+              installer is not included in this development build.
+            </p>
+          </details>
+          <details>
+            <summary>Already have a pairing code?</summary>
+            <label
+              >Pairing code<textarea
+                id="join-code"
+                rows="4"
+                placeholder="Paste the code from your other device"
+                spellcheck="false"
+                autocomplete="off"
+              ></textarea>
+            </label>
+            <button id="join">Pair this computer</button>
+          </details>
+          <details id="advanced">
+            <summary>Advanced: use my own sync server</summary>
+            <p>
+              Use this if you already run an HTTPS Folio sync server. Enter its
+              address here; your phone will receive it in the pairing code.
+            </p>
+            <label
+              >Sync server address<input
+                id="relay"
+                type="url"
+                placeholder="https://sync.example.com"
+            /></label>
+            <button id="create">Create private library</button>
+          </details>
+        </div>
         <div id="paired" hidden>
+          <h2>Your phone is one code away.</h2>
+          <p>
+            On your phone, open Folio → Devices, paste this code, and choose
+            Pair this device.
+          </p>
           <label
             >Your pairing code<textarea
               id="pair-code"

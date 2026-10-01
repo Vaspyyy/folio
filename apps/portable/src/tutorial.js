@@ -25,18 +25,18 @@ const steps = [
     points: [
       [
         "Start on your computer",
-        "In the browser extension's library, open Your devices. Enter your relay address and choose Create private library.",
+        "In the browser extension's library, open Your devices and choose Connect this computer. Start the computer helper first if Folio asks you to.",
       ],
       [
         "Copy your pairing code",
         "On this device, open Devices, paste the code, and choose Pair this device. Keep the code private: it grants access to your library.",
       ],
       [
-        "Keep the relay reachable",
-        "The relay must be running for sync. A localhost address on your computer cannot be reached from your phone.",
+        "Stay connected",
+        "Keep the computer helper running and use the same Wi-Fi on both devices. For syncing across different networks, configure your own HTTPS sync server under Advanced.",
       ],
     ],
-    note: "The relay receives encrypted library data. Page image files stay on each device.",
+    note: "The sync helper receives encrypted library data. Page image files stay on each device.",
     relay: true,
   },
   {

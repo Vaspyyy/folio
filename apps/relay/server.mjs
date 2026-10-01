@@ -11,6 +11,7 @@ import {
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
+import { phoneOrigins } from "./network.js";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const random = (n) => randomBytes(n).toString("base64url");
 export async function createRelay({
@@ -20,8 +21,11 @@ export async function createRelay({
   port = 8787,
   tls,
   publicOrigin,
+  interfaces,
 } = {}) {
   const directory = resolve(dataDir ?? ".folio-relay");
+  // Validate a configured public address before starting the server.
+  phoneOrigins({ host, port, tls, publicOrigin, interfaces });
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const locks = new Map(),
     rates = new Map();
@@ -94,6 +98,18 @@ export async function createRelay({
     }
     const path = new URL(req.url, "http://localhost").pathname;
     if (path === "/health") return respond(res, 200, { ok: true });
+    if (path === "/v1/setup" && req.method === "GET")
+      return respond(res, 200, {
+        product: "folio-computer",
+        version: 1,
+        phoneOrigins: phoneOrigins({
+          host,
+          port: server.address().port,
+          tls,
+          publicOrigin,
+          interfaces,
+        }),
+      });
     if (path === "/v1/vaults" && req.method === "POST") {
       if (!rate(req, "create", 20))
         return respond(res, 429, { error: "Slow down" });
@@ -238,7 +254,8 @@ if (
           key: await readFile(process.env.FOLIO_TLS_KEY),
         }
       : undefined;
-  const host = process.env.FOLIO_HOST ?? "127.0.0.1",
+  const computer = process.argv.includes("--computer");
+  const host = process.env.FOLIO_HOST ?? (computer ? "0.0.0.0" : "127.0.0.1"),
     port = Number(process.env.FOLIO_PORT ?? 8787);
   await createRelay({
     host,
@@ -247,5 +264,12 @@ if (
     tls,
     publicOrigin: process.env.FOLIO_PUBLIC_ORIGIN,
   });
-  console.log(`Folio is ready at ${tls ? "https" : "http"}://${host}:${port}`);
+  if (computer)
+    console.log(
+      "Computer helper running. In Folio, open Your devices and choose Connect this computer. Keep this terminal open while syncing. Use the same Wi-Fi on your phone.",
+    );
+  else
+    console.log(
+      `Folio is ready at ${tls ? "https" : "http"}://${host}:${port}`,
+    );
 }

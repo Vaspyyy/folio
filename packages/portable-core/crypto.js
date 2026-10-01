@@ -28,7 +28,7 @@ export function endpoint(value) {
     u.hash ||
     u.pathname !== "/"
   )
-    throw new Error("Enter the relay origin, such as https://sync.example.com");
+    throw new Error("Enter a sync server address, such as https://sync.example.com");
   return u.origin;
 }
 export function validatePair(value) {

@@ -1,4 +1,4 @@
-const CACHE = "folio-pocket-v2";
+const CACHE = "folio-pocket-v3";
 self.addEventListener("install", (e) => {
   e.waitUntil(
     caches

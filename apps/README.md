@@ -10,7 +10,39 @@ The runtime is shared between Android's bundled WebView and the desktop browser
 client. It has no dependencies on the extension's source adapters or recommender.
 The extension sends only personally saved titles. No new source is implemented.
 
-## Run the computer companion and relay
+## Connect your computer and phone
+
+On the computer, in the Folio project folder, run:
+
+```sh
+npm ci
+npm run sync:computer
+```
+
+Leave this helper running. Reload the extension, open **Your devices**, and choose
+**Connect this computer**. Allow the browser to connect to the helper. Folio
+finds the computer's Wi-Fi address and includes it in the pairing code; you do
+not need to type a server address. Copy the code to **Devices** in the phone app
+and choose **Pair this device**. Use the same Wi-Fi on both devices.
+
+This local connection is supported by the debug Android APK. A release build or
+syncing across networks needs your own HTTPS sync server under **Advanced**.
+There is no hosted Folio service. The current development build requires Node 22+
+on the computer; a desktop installer and automatic service startup are later work.
+The browser extension cannot start a computer process itself.
+
+The helper advertises private IPv4 network addresses, prefers Wi-Fi over wired
+interfaces, and skips common virtual interfaces. A loopback-only server is not
+advertised as phone-reachable. A configured public HTTPS origin takes priority.
+Encrypted data stays in `.folio-relay/`; page image bytes remain on each device.
+The computer's own connection uses localhost, while its pairing code carries the
+phone-reachable address. A network address change can require a new pairing code;
+phone network discovery and IPv6-only networks are not supported in this milestone.
+For a helper running on a custom local port, the extension connection page accepts
+`?computer=http://127.0.0.1:PORT`; this override is restricted to loopback hosts.
+The normal setup always uses port 8787.
+
+## Advanced: run the browser client and sync server
 
 From the repository root, using Node 22+:
 
@@ -92,8 +124,10 @@ connection is required to read the guide.
 
 1. Rebuild and reload the extension (`npm run build`, then Reload in the browser's
    extension management page). Open **Your devices** from the library sidebar.
-2. Enter the reachable relay address and choose **Create private library**. Allow
-   the browser's access request for that specific relay origin.
+2. Start the computer helper with `npm run sync:computer`, then choose
+   **Connect this computer**. Allow the browser's access request for the helper.
+   For an existing HTTPS server, open **Advanced: use my own sync server**,
+   enter its address, and choose **Create private library**.
 3. Copy the pairing code. In Android, open **Devices**, paste it, and choose
    **Pair this device**. The code contains the encryption key and relay credential;
    share it only with your own devices and retain it if you need to restore access.
@@ -162,7 +196,9 @@ Browser tests use neutral synthetic books and images only. They pair separate
 contexts, sync progress and notes, reload while offline, read cached images,
 exercise continuous mode and privacy, and remove a download without deleting its
 library entry. The companion suite uses the actual built extension and relay;
-it simulates approving the browser's optional relay permission prompt.
+it simulates approving the browser's optional helper permission prompt. It also
+checks helper detection, a missing-helper recovery path, hidden advanced address
+fields, and a pairing code whose connection address works from the phone context.
 
 The debug APK has been compiled locally. No Android phone or emulator was
 connected during development; native document picking, image transport, and

@@ -79,25 +79,58 @@
         <div class="panel">
           <h2 id="connection-title">Connect your library</h2>
           <p id="connection-state">
-            Choose a relay you control to pair your devices.
+            Copy the pairing code from Your devices in Folio on your computer.
+            No server address is needed here.
           </p>
-          <label
-            >Relay address<input
-              id="relay-url"
-              type="url"
-              placeholder="https://sync.example.com"
-              autocomplete="url" /></label
-          ><button id="create-pair">Create private library</button>
-          <div class="divider">OR JOIN AN EXISTING LIBRARY</div>
-          <label
-            >Pairing code<textarea
-              id="pair-input"
-              rows="3"
-              placeholder="folio1.…"
-              spellcheck="false"
-              autocomplete="off"
-            ></textarea></label
-          ><button id="join-pair" class="secondary">Pair this device</button>
+          <div id="device-unpaired">
+            <label
+              >Pairing code<textarea
+                id="pair-input"
+                rows="3"
+                placeholder="Paste the code from your computer"
+                spellcheck="false"
+                autocomplete="off"
+              ></textarea>
+            </label>
+            <button id="join-pair">Pair this device</button>
+            <details id="computer-help">
+              <summary>Set up on your computer</summary>
+              <p>
+                On your computer, open the extension's library → Your devices
+                and choose Connect this computer. Then copy its code here.
+              </p>
+              <p>
+                First time? Open a terminal in the Folio project folder on your
+                computer and run <code>npm run sync:computer</code>. Keep it
+                running and use the same Wi-Fi on your phone. The debug Android
+                app supports this local connection; release builds and syncing
+                across networks need HTTPS.
+              </p>
+              <button id="connect-computer" class="secondary">
+                Connect this computer
+              </button>
+              <p class="hint">
+                Use this button in the computer browser app. The browser cannot
+                start the helper itself; a desktop installer is not included in
+                this development build.
+              </p>
+            </details>
+            <details id="advanced-sync">
+              <summary>Advanced: use my own sync server</summary>
+              <p>
+                Folio has no hosted sync service yet. Use this option if you
+                already run your own HTTPS Folio sync server.
+              </p>
+              <label
+                >Sync server address<input
+                  id="relay-url"
+                  type="url"
+                  placeholder="https://sync.example.com"
+                  autocomplete="url"
+              /></label>
+              <button id="create-pair">Create private library</button>
+            </details>
+          </div>
           <div id="paired" hidden>
             <label
               >Your pairing code<textarea
@@ -169,20 +202,20 @@
       <p id="tutorial-intro"></p>
       <ol id="tutorial-points"></ol>
       <details id="tutorial-relay-help" hidden>
-        <summary>How do I get a relay address?</summary>
+        <summary>How do I start the computer helper?</summary>
         <p>On your computer, in the Folio project folder, run:</p>
         <pre><code>npm ci
-FOLIO_HOST=0.0.0.0 npm run start:portable</code></pre>
+npm run sync:computer</code></pre>
         <p>
-          For the debug Android app on the same Wi-Fi, enter the computer's LAN
-          address, such as <code>http://192.168.1.20:8787</code>, on both
-          devices. Use your computer's address, not this example.
+          In the extension's library, open Your devices and choose Connect this
+          computer. Folio finds the connection address for you. Copy its pairing
+          code to Devices on your phone.
         </p>
         <p>
-          Open <code>http://127.0.0.1:8787</code> on the computer for the
-          standalone browser app. Keep the server running for sync. Everyday
-          cross-network use and release Android builds require an HTTPS relay
-          with a trusted certificate.
+          Keep the helper running and use the same Wi-Fi on your computer and
+          phone. This local connection works with the debug Android app. For a
+          release build or syncing across different networks, use your own HTTPS
+          sync server under Advanced.
         </p>
         <p>You can use Folio locally without setting up a relay.</p>
       </details>

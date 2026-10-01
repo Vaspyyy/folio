@@ -39,12 +39,14 @@ try {
   await pc
     .getByRole("heading", { name: "Bring your library along." })
     .waitFor();
-  await pc.getByText("How do I get a relay address?", { exact: true }).click();
+  await pc
+    .getByText("How do I start the computer helper?", { exact: true })
+    .click();
   assert.ok(
     await pc
       .locator("#tutorial-relay-help")
       .textContent()
-      .then((text) => text.includes("FOLIO_HOST=0.0.0.0")),
+      .then((text) => text.includes("npm run sync:computer")),
   );
   await pc.getByRole("button", { name: "Back", exact: true }).click();
   await pc
@@ -105,7 +107,14 @@ try {
     .waitFor();
   await pc.getByRole("button", { name: "Back to library" }).click();
   await pc.getByRole("button", { name: "Devices", exact: true }).click();
-  await pc.getByLabel("Relay address", { exact: true }).fill(origin);
+  assert.equal(
+    await pc.getByLabel("Sync server address", { exact: true }).isVisible(),
+    false,
+  );
+  await pc
+    .getByText("Advanced: use my own sync server", { exact: true })
+    .click();
+  await pc.getByLabel("Sync server address", { exact: true }).fill(origin);
   await pc
     .getByRole("button", { name: "Create private library", exact: true })
     .click();

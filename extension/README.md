@@ -131,11 +131,19 @@ title container when available. Navigation, sidebars, related listings, external
 links, and wrappers around title links are excluded. Pages without a recognized
 field yield no tags; live markup compatibility remains unverified.
 
-## Paired Android companion (0.7.0)
+## Paired Android companion (0.7.1)
 
-Open **Your devices** from the library sidebar to pair with Folio Pocket. Library
-metadata and reading progress sync through an encrypted relay. Your browser grants
-access only to the relay origin you select; the manifest lists optional origins
-so arbitrary personal relay servers can be used. Open a saved title in the Folio
-reader once to share its page list, then select **Keep offline** on the phone.
-Unsaved catalog records are not shared. See [the setup guide](../apps/README.md).
+Open **Your devices** from the library sidebar. Start the computer helper with
+`npm run sync:computer`, then choose **Connect this computer**. The helper detects
+the computer's Wi-Fi address and includes it in a pairing code. Copy that code to
+**Devices** on the phone and choose **Pair this device**. No address entry is needed
+for the normal local setup. Keep the helper running and use the same Wi-Fi.
+
+Library metadata and reading progress sync encrypted. Your browser grants access
+only to the helper origin you select. **Advanced: use my own sync server** keeps
+custom HTTPS hosting available. No hosted Folio service or desktop installer is
+included yet; the current computer helper requires Node 22+.
+
+Open a saved title in the Folio reader once to share its page list, then select
+**Keep offline** on the phone. Unsaved catalog records are not shared. See
+[the setup guide](../apps/README.md).

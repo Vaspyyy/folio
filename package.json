@@ -1,6 +1,6 @@
 {
   "name": "folio-library",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,6 +13,7 @@
     "format": "prettier --write extension/src extension/tests scripts",
     "build:portable": "node scripts/build-portable.mjs",
     "start:portable": "npm run build:portable && node apps/relay/server.mjs",
+    "sync:computer": "npm run build:portable && node apps/relay/server.mjs --computer",
     "test:portable": "node --test packages/portable-core/test/*.test.js",
     "test:portable:browser": "npm run build:portable && node scripts/portable-smoke.mjs",
     "build:android": "npm run build:portable && node scripts/build-android.mjs",

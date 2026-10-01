@@ -7,10 +7,12 @@ import {
   syncRepository,
   downloadTitle,
 } from "../../../packages/portable-core/sync.js";
+import { parsePairingCode } from "../../../packages/portable-core/crypto.js";
 import {
-  pairingCode,
-  parsePairingCode,
-} from "../../../packages/portable-core/crypto.js";
+  findComputer,
+  rememberPhoneAddress,
+  phonePairingCode,
+} from "../../../packages/portable-core/setup.js";
 const $ = (id) => document.getElementById(id);
 const node = (tag, value, className) => {
   const e = document.createElement(tag);
@@ -268,6 +270,7 @@ async function syncNow() {
 async function updatePair() {
   const pair = await repo.get("pair");
   $("paired").hidden = !pair;
+  $("device-unpaired").hidden = !!pair;
   $("create-pair").disabled = !!pair;
   $("join-pair").disabled = !!pair;
   $("relay-url").disabled = !!pair;
@@ -275,15 +278,16 @@ async function updatePair() {
   $("connection-title").textContent = pair
     ? "Your devices, together."
     : "Connect your library";
-  $("pair-code").value = pair ? pairingCode(pair) : "";
+  $("pair-code").value = pair ? await phonePairingCode(repo, pair) : "";
   if (pair) $("relay-url").value = pair.relay;
   else {
     $("sync-indicator").textContent = "On this device";
     $("connection-state").textContent =
-      "Choose a relay you control to pair your devices.";
+      "Copy the pairing code from Your devices in Folio on your computer. No server address is needed here.";
   }
 }
-async function connect(pair) {
+async function connect(pair, phoneOrigin = null) {
+  await rememberPhoneAddress(repo, pair, phoneOrigin);
   await repo.set("pair", pair);
   await updatePair();
   await syncNow();
@@ -514,6 +518,16 @@ async function boot() {
     $("detail").close();
     await reload();
     scheduleSync();
+  });
+  $("connect-computer").hidden = !!window.FolioImages;
+  $("connect-computer").onclick = run(async () => {
+    $("connect-computer").disabled = true;
+    try {
+      const setup = await findComputer(location.origin);
+      await connect(await createPair(setup.computerOrigin), setup.phoneOrigin);
+    } finally {
+      $("connect-computer").disabled = false;
+    }
   });
   $("create-pair").onclick = run(async () =>
     connect(await createPair($("relay-url").value)),

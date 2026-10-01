@@ -34,5 +34,13 @@ read/modify/write transaction; `mergeDocuments` applies field-level revisions.
 and download helpers accept injected fetch functions, signals, and progress
 callbacks for deterministic tests and native hosts. Media bytes stay local.
 
+`setup.js` discovers a running computer helper and creates phone-ready pairing
+codes. `findComputer` reads only network connection metadata from `/v1/setup`;
+`rememberPhoneAddress` binds the phone address to the current vault. The computer
+can sync through localhost while its phone code points to the same server's
+Wi-Fi or configured HTTPS address. Keys and credentials are generated locally
+and are never included in the helper's setup response. Normal pairing does not
+require address entry. Custom local helper ports are restricted to loopback hosts.
+
 See [the app guide](../../apps/README.md) for deployment, Android building, privacy,
 limitations, and validation. Run `npm run test:portable` from the repository root.

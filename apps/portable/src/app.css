@@ -805,3 +805,19 @@ body[data-private="true"] #devices {
   padding-top: 12px;
   padding-bottom: 12px;
 }
+
+#computer-help,
+#advanced-sync {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  margin-top: 22px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+#computer-help summary,
+#advanced-sync summary {
+  cursor: pointer;
+}
+#computer-help code {
+  overflow-wrap: anywhere;
+}

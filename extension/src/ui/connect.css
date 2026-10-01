@@ -81,3 +81,36 @@ button:disabled {
 #status {
   color: #173b32;
 }
+
+details {
+  border-top: 1px solid #d1dbc8;
+  margin-top: 22px;
+  padding-top: 18px;
+}
+summary {
+  font-size: 13px;
+  cursor: pointer;
+}
+ol {
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+li {
+  margin: 10px 0;
+}
+code {
+  overflow-wrap: anywhere;
+}
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #92b39b;
+  outline-offset: 3px;
+}
+@media (max-width: 480px) {
+  h1 {
+    font-size: 46px;
+  }
+}
