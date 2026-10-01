@@ -8,6 +8,8 @@ const DISCOVERY_STATE = "folio:discovery-state";
 const SIX_HOURS = 6 * 60;
 let discoveryRun = null;
 let offscreenOpening = null;
+let offscreenClosing = null;
+let offscreenUsers = 0;
 
 const openLibrary = () =>
   chrome.tabs.create({ url: chrome.runtime.getURL("library.html") });
@@ -34,6 +36,7 @@ async function ensureDiscoveryAlarm(delayInMinutes = SIX_HOURS) {
 }
 
 async function ensureOffscreen() {
+  if (offscreenClosing) await offscreenClosing;
   if (await chrome.offscreen.hasDocument()) return;
   if (!offscreenOpening) {
     offscreenOpening = chrome.offscreen
@@ -41,7 +44,7 @@ async function ensureOffscreen() {
         url: "offscreen.html",
         reasons: ["DOM_PARSER"],
         justification:
-          "Parse source listing and title HTML for background discovery without opening source tabs.",
+          "Parse source HTML for saved reading pages and catalog metadata without opening source tabs.",
       })
       .finally(() => {
         offscreenOpening = null;
@@ -49,6 +52,44 @@ async function ensureOffscreen() {
   }
   await offscreenOpening;
 }
+
+async function withOffscreen(task) {
+  offscreenUsers++;
+  try {
+    await ensureOffscreen();
+    return await task();
+  } finally {
+    offscreenUsers--;
+    if (
+      !offscreenUsers &&
+      (await chrome.offscreen.hasDocument()) &&
+      !offscreenUsers
+    ) {
+      offscreenClosing = chrome.offscreen
+        .closeDocument()
+        .catch(() => {})
+        .finally(() => {
+          offscreenClosing = null;
+        });
+      await offscreenClosing;
+    }
+  }
+}
+
+const syncSavedLibrary = (db, retryPages = false) =>
+  syncMobile(db, {
+    retryPages,
+    pageProvider: (url) =>
+      withOffscreen(async () => {
+        const response = await chrome.runtime.sendMessage({
+          type: "offscreen:readerPages",
+          url: canonicalUrl(url),
+        });
+        if (!response?.ok)
+          throw new Error(response?.error || "Reading pages unavailable");
+        return response.value;
+      }),
+  });
 
 async function discoveryStatus() {
   const stored = await chrome.storage.local.get(DISCOVERY_STATE);
@@ -99,18 +140,19 @@ async function runDiscovery({ manual = false } = {}) {
         .map((entry) => entry.metadata.url)
         .slice(0, 20);
 
-      await ensureOffscreen();
-      const response = await chrome.runtime.sendMessage({
-        type: "offscreen:discover",
-        options: {
-          roots: ["https://multporn.net/"],
-          maxListingPages: manual ? 6 : 4,
-          maxDetails: manual ? 18 : 12,
-          requestDelayMs: manual ? 250 : 400,
-          skipDetailIds,
-          followedUrls,
-        },
-      });
+      const response = await withOffscreen(() =>
+        chrome.runtime.sendMessage({
+          type: "offscreen:discover",
+          options: {
+            roots: ["https://multporn.net/"],
+            maxListingPages: manual ? 6 : 4,
+            maxDetails: manual ? 18 : 12,
+            requestDelayMs: manual ? 250 : 400,
+            skipDetailIds,
+            followedUrls,
+          },
+        }),
+      );
       if (!response?.ok)
         throw new Error(response?.error || "Background parser unavailable");
 
@@ -137,8 +179,6 @@ async function runDiscovery({ manual = false } = {}) {
       throw error;
     } finally {
       discoveryRun = null;
-      if (await chrome.offscreen.hasDocument())
-        await chrome.offscreen.closeDocument().catch(() => {});
     }
   })();
   return discoveryRun;
@@ -158,6 +198,7 @@ ensureDiscoveryAlarm().catch(() => {});
 
 chrome.action.onClicked.addListener(openLibrary);
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (message?.type?.startsWith("offscreen:")) return;
   (async () => {
     const ownPage = sender.url?.startsWith(chrome.runtime.getURL(""));
     if (!ownPage) {
@@ -209,9 +250,13 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     const db = await library;
     switch (message.type) {
       case "mobileSync":
-        return syncMobile(db);
+        return syncSavedLibrary(db, true);
       case "mobilePages":
-        return shareSavedPages(db, message.url, message.pages);
+        await shareSavedPages(db, message.url, message.pages);
+        // The reader sends this without waiting. Complete the send attempt here;
+        // a network failure leaves the saved list available for periodic retry.
+        await syncSavedLibrary(db).catch(() => {});
+        return null;
 
       case "catalog":
         return db.catalog(message.limit);
@@ -273,5 +318,5 @@ chrome.alarms.get("folio-mobile-sync").then((alarm) => {
 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "folio-mobile-sync")
-    library.then(syncMobile).catch(() => {});
+    library.then((db) => syncSavedLibrary(db)).catch(() => {});
 });

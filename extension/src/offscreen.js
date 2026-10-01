@@ -4,7 +4,9 @@ import {
   listingPageUrls,
   readerPages,
   snapshotMetadata,
+  readerSnapshot,
 } from "./adapters/multporn.js";
+import { canonicalUrl } from "./core/model.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -29,7 +31,9 @@ async function fetchDocument(url) {
 }
 
 function serializableListingItems(doc, href) {
-  return extractListingItems(doc, href).map(({ mount, ...metadata }) => metadata);
+  return extractListingItems(doc, href).map(
+    ({ mount, ...metadata }) => metadata,
+  );
 }
 
 async function discover({
@@ -92,11 +96,13 @@ async function discover({
             ...metadata,
             pageCount: pages.length || metadata.pageCount,
             covers: [
-              ...new Set([
-                metadata.coverUrl,
-                ...(metadata.covers || []),
-                ...pages,
-              ].filter(Boolean)),
+              ...new Set(
+                [
+                  metadata.coverUrl,
+                  ...(metadata.covers || []),
+                  ...pages,
+                ].filter(Boolean),
+              ),
             ].slice(0, 8),
           });
         } catch (error) {
@@ -135,6 +141,18 @@ async function discover({
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, reply) => {
+  if (message?.type === "offscreen:readerPages") {
+    Promise.resolve()
+      .then(async () => {
+        const url = canonicalUrl(message.url);
+        return readerSnapshot(await fetchDocument(url), url).pages;
+      })
+      .then(
+        (value) => reply({ ok: true, value }),
+        (error) => reply({ ok: false, error: error.message }),
+      );
+    return true;
+  }
   if (message?.type !== "offscreen:discover") return;
   discover(message.options).then(
     (value) => reply({ ok: true, value }),

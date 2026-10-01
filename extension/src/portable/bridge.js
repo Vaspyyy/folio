@@ -107,6 +107,66 @@ async function project(library, item, expected) {
   });
 }
 let syncing;
+// Resolve only saved titles, in small batches. A source failure must not prevent
+// progress/notes from syncing or erase a page list already known on this device.
+async function preparePages(library, repo, options) {
+  if (!options.pageProvider) return {};
+  const current = await library.list();
+  const shared = new Map((await repo.items()).map((item) => [item.id, item]));
+  const retry = (await repo.get("pagePreparationRetry")) ?? {};
+  const now = Date.now();
+  const missing = current.filter(
+    (entry) => !shared.get(entry.metadata.id)?.pages.length,
+  );
+  const targets = missing
+    .filter((entry) => options.retryPages || !(retry[entry.metadata.id] > now))
+    .slice(0, 2);
+  const results = await Promise.allSettled(
+    targets.map((entry) =>
+      Promise.resolve().then(() => options.pageProvider(entry.metadata.url)),
+    ),
+  );
+  let changed = false,
+    failed = 0,
+    pageError = "";
+  for (let i = 0; i < targets.length; i++) {
+    const id = targets[i].metadata.id,
+      result = results[i];
+    try {
+      if (result.status === "rejected") throw result.reason;
+      if (!Array.isArray(result.value) || !result.value.length)
+        throw new Error("No reading pages available");
+      // A deletion, imported page list or desktop read can happen during fetch.
+      if (!(await library.get(id))) continue;
+      if ((await repo.items()).find((item) => item.id === id)?.pages.length)
+        continue;
+      await repo.edit(id, {
+        pages: result.value,
+        pageCount: result.value.length,
+      });
+      delete retry[id];
+      changed = true;
+    } catch (error) {
+      retry[id] = now + 5 * 60 * 1000;
+      failed++;
+      pageError ||= error.message;
+    }
+  }
+  const liveIds = new Set(current.map((entry) => entry.metadata.id));
+  await repo.set(
+    "pagePreparationRetry",
+    Object.fromEntries(Object.entries(retry).filter(([id]) => liveIds.has(id))),
+  );
+  if (changed) await syncRepository(repo, options);
+  const after = new Map((await repo.items()).map((item) => [item.id, item]));
+  return {
+    pagesPending: current.filter(
+      (entry) => !after.get(entry.metadata.id)?.pages.length,
+    ).length,
+    pagesFailed: failed,
+    pageError,
+  };
+}
 export function syncMobile(library, options = {}) {
   if (syncing) return syncing;
   syncing = (async () => {
@@ -154,7 +214,12 @@ export function syncMobile(library, options = {}) {
       // which could silently acknowledge edits that have not been exported.
       await repo.set("extensionBaseline", baseline);
       if (changedDuringSync) await syncRepository(repo, options);
-      return { paired: true, lastSync: await repo.get("lastSync") };
+      const preparation = await preparePages(library, repo, options);
+      return {
+        paired: true,
+        lastSync: await repo.get("lastSync"),
+        ...preparation,
+      };
     } finally {
       repo.db.close();
     }

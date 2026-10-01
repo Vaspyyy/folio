@@ -39,9 +39,13 @@ async function render() {
   );
 }
 async function sync() {
-  status("Syncing your private library…");
-  await request("mobileSync");
-  status("Your saved library is in sync.");
+  status("Syncing your library and preparing reading pages…");
+  const result = await request("mobileSync");
+  status(
+    result.pagesPending
+      ? `Your library is in sync. ${result.pagesPending} titles still need reading pages. ${result.pagesFailed ? `Some pages could not be prepared: ${result.pageError}. Try Sync now again or open the title in your computer reader.` : "Keep the browser and helper running; preparation continues automatically."}`
+      : "Your saved library is in sync.",
+  );
 }
 $("connect-computer").onclick = run(async () => {
   $("connect-computer").disabled = true;

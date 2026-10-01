@@ -320,3 +320,95 @@ test("extension companion sends only saved records and applies phone progress wi
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("computer sync prepares only missing saved page lists in bounded batches, isolates failures, and retries on demand", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "folio-pages-test-"));
+  const server = await createRelay({ dataDir: dir, port: 0 });
+  const library = new Library(
+    await openDatabase("pages-" + crypto.randomUUID()),
+  );
+  const repo = await openRepository(),
+    phone = await repository();
+  const urls = ["observatory", "mystery", "fantasy", "programming"].map(
+    (name) => "https://multporn.net/comics/neutral-" + name,
+  );
+  const pageUrls = [
+    "https://images.example/first.png",
+    "https://images.example/second.png",
+  ];
+  try {
+    const pairing = await createPair(
+      "http://127.0.0.1:" + server.address().port,
+    );
+    await repo.set("pair", pairing);
+    await phone.set("pair", pairing);
+    for (const url of urls.slice().reverse()) {
+      await library.save({
+        url,
+        title: "Neutral book " + url.split("-").pop(),
+        pageCount: 2,
+      });
+      await library.update(url, { notes: "Keep this note", page: 1 });
+    }
+    await shareSavedPages(library, urls[3], pageUrls);
+    await library.observeCatalog([
+      {
+        url: "https://multporn.net/comics/neutral-unsaved",
+        title: "An unsaved novel",
+      },
+    ]);
+    const requested = [];
+    let broken = true;
+    const pageProvider = async (url) => {
+      requested.push(url);
+      if (url === urls[1] && broken) throw new Error("Source unavailable");
+      return pageUrls;
+    };
+    const first = await syncMobile(library, { pageProvider });
+    assert.equal(requested.length, 2, "at most two source reads per sync");
+    assert.equal(first.pagesFailed, 1);
+    assert.equal(first.pagesPending, 2);
+    await syncRepository(phone);
+    assert.equal((await phone.items()).length, 4);
+    assert.equal(
+      (await phone.items()).find((i) => i.id === urls[1]).notes,
+      "Keep this note",
+    );
+    assert.deepEqual(
+      (await phone.items()).find((i) => i.id === urls[3]).pages,
+      pageUrls,
+    );
+    const remaining = urls.filter(
+      (url) => url !== urls[3] && !requested.includes(url),
+    );
+    requested.length = 0;
+    await syncMobile(library, { pageProvider });
+    assert.deepEqual(
+      requested,
+      remaining,
+      "failed titles back off; batch continues past them",
+    );
+    requested.length = 0;
+    broken = false;
+    const final = await syncMobile(library, { pageProvider, retryPages: true });
+    assert.deepEqual(
+      requested,
+      [urls[1]],
+      "manual retry does not re-fetch known pages or unsaved titles",
+    );
+    assert.equal(final.pagesPending, 0);
+    await syncRepository(phone);
+    for (const actual of await phone.items()) {
+      assert.deepEqual(actual.pages, pageUrls);
+      assert.equal(actual.page, 1);
+      assert.equal(actual.notes, "Keep this note");
+    }
+  } finally {
+    repo.db.close();
+    phone.db.close();
+    library.db.close();
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await rm(dir, { recursive: true, force: true });
+  }
+});

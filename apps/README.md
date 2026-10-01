@@ -131,10 +131,14 @@ connection is required to read the guide.
 3. Copy the pairing code. In Android, open **Devices**, paste it, and choose
    **Pair this device**. The code contains the encryption key and relay credential;
    share it only with your own devices and retain it if you need to restore access.
-4. Open a saved title in the computer's Folio reader once. Its known page list is
-   added to encrypted library sync. Choose **Sync now** on either side when you
-   want to transfer immediately; the extension checks every minute and the mobile
-   client checks every 20 seconds while open, on resume, and after local edits.
+4. Computer sync automatically prepares missing reading page lists for saved
+   titles, two at a time, and sends them through encrypted library sync. No desktop
+   reader visit is required. Keep the browser and helper running for larger
+   libraries; the extension continues every minute. **Send library / Sync now**
+   retries preparation immediately, including failed titles. A source failure
+   does not block notes or progress sync. The phone checks every 20 seconds while
+   open, on resume, and after local edits. Opening a saved title in the desktop
+   reader also sends its page list immediately.
 5. On the phone, open that title's details and choose **Keep offline**. Downloads
    run sequentially, show page progress, and can be cancelled. A failed or cancelled
    replacement keeps the previous complete copy.
@@ -199,6 +203,11 @@ library entry. The companion suite uses the actual built extension and relay;
 it simulates approving the browser's optional helper permission prompt. It also
 checks helper detection, a missing-helper recovery path, hidden advanced address
 fields, and a pairing code whose connection address works from the phone context.
+It verifies reading without a prior desktop-reader visit and immediate sharing
+of newly known page lists. Chromium offscreen-document fetches use synthetic
+responses in a disposable test copy; the production parser and sync logic run
+unchanged. Failed page preparation, bounded batches, retry backoff, and retaining
+existing pages are also covered by unit tests.
 
 The debug APK has been compiled locally. No Android phone or emulator was
 connected during development; native document picking, image transport, and
