@@ -118,6 +118,15 @@ try {
   const app = await phone.newPage();
   app.on("pageerror", (e) => errors.push(e.message));
   await app.goto(origin);
+  await app.getByRole("button", { name: "Skip tutorial", exact: true }).click();
+  await app.locator("#tutorial").waitFor({ state: "hidden" });
+  await app.reload();
+  await app.getByRole("heading", { name: "A world within reach." }).waitFor();
+  assert.equal(
+    await app.locator("#tutorial").isVisible(),
+    false,
+    "skipping persists across restarts",
+  );
   await app.getByRole("button", { name: "Devices", exact: true }).click();
   await app.getByLabel("Pairing code", { exact: true }).fill(pairingCode(pair));
   await app

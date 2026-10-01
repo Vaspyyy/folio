@@ -33,7 +33,44 @@ try {
   for (const p of [pc, mobile])
     p.on("pageerror", (e) => errors.push(e.message));
   await pc.goto(origin);
+  await pc.getByRole("dialog", { name: "Your stories, everywhere." }).waitFor();
+  assert.equal(await pc.locator("#tutorial-back").isDisabled(), true);
+  await pc.getByRole("button", { name: "Next chapter →" }).click();
+  await pc
+    .getByRole("heading", { name: "Bring your library along." })
+    .waitFor();
+  await pc.getByText("How do I get a relay address?", { exact: true }).click();
+  assert.ok(
+    await pc
+      .locator("#tutorial-relay-help")
+      .textContent()
+      .then((text) => text.includes("FOLIO_HOST=0.0.0.0")),
+  );
+  await pc.getByRole("button", { name: "Back", exact: true }).click();
+  await pc
+    .getByRole("heading", { name: "Your stories, everywhere.", exact: true })
+    .waitFor();
+  for (let i = 0; i < 3; i++)
+    await pc.getByRole("button", { name: "Next chapter →" }).click();
+  await pc
+    .getByRole("button", { name: "Use on this device", exact: true })
+    .click();
+  await pc.locator("#tutorial").waitFor({ state: "hidden" });
+  await pc.reload();
   await pc.getByRole("heading", { name: "A world within reach." }).waitFor();
+  assert.equal(
+    await pc.locator("#tutorial").isVisible(),
+    false,
+    "tutorial completion persists on this device",
+  );
+  await pc.getByRole("button", { name: "Devices", exact: true }).click();
+  await pc
+    .getByRole("button", { name: "Getting started", exact: true })
+    .click();
+  await pc.getByRole("dialog", { name: "Your stories, everywhere." }).waitFor();
+  await pc.keyboard.press("Escape");
+  await pc.locator("#tutorial").waitFor({ state: "hidden" });
+  await pc.getByRole("button", { name: "Library", exact: true }).click();
   await pc.getByRole("button", { name: "＋ Add a title", exact: true }).click();
   await pc.getByLabel("Title", { exact: true }).fill("The Observatory");
   await pc
@@ -75,7 +112,32 @@ try {
   await pc.getByText("Your library is paired.", { exact: true }).waitFor();
   const code = await pc.locator("#pair-code").inputValue();
   await mobile.goto(origin);
-  await mobile.getByRole("button", { name: "Devices", exact: true }).click();
+  await mobile
+    .getByRole("dialog", { name: "Your stories, everywhere." })
+    .waitFor();
+  await mobile.screenshot({
+    path: "test-results/folio-pocket-tutorial.png",
+    fullPage: true,
+  });
+  assert.ok(
+    await mobile.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth + 1,
+    ),
+    "tutorial fits the phone viewport",
+  );
+  for (let i = 0; i < 3; i++)
+    await mobile.getByRole("button", { name: "Next chapter →" }).click();
+  await mobile
+    .getByRole("button", { name: "Pair my library", exact: true })
+    .click();
+  await mobile.locator("#tutorial").waitFor({ state: "hidden" });
+  assert.equal(
+    await mobile
+      .locator("#pair-input")
+      .evaluate((e) => e === document.activeElement),
+    true,
+  );
+
   await mobile.getByLabel("Pairing code", { exact: true }).fill(code);
   await mobile
     .getByRole("button", { name: "Pair this device", exact: true })
@@ -203,7 +265,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: paired desktop/phone library, private progress and notes sync, page import, reading after offline reload, continuous mode, privacy, and independent download removal.",
+    "PASS: first-start tutorial, replay/back/dismissal and persistent completion, paired desktop/phone library, private progress and notes sync, page import, reading after offline reload, continuous mode, privacy, and independent download removal.",
   );
 } finally {
   await browser.close();

@@ -466,6 +466,116 @@ textarea {
   grid-template-columns: 1fr 90px;
   gap: 15px;
 }
+#tutorial {
+  width: min(590px, calc(100vw - 28px));
+  padding: clamp(22px, 5vw, 40px);
+  max-height: calc(100dvh - 36px);
+}
+.tutorial-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tutorial-heading .edition {
+  flex: 1;
+  letter-spacing: 1px;
+}
+#tutorial-progress {
+  display: flex;
+  gap: 7px;
+  list-style: none;
+  margin: 26px 0;
+  padding: 0;
+}
+#tutorial-progress li {
+  flex: 1;
+  height: 3px;
+  background: var(--line);
+  border-radius: 3px;
+}
+#tutorial-progress [aria-current] {
+  background: var(--ink);
+}
+#tutorial-title {
+  font:
+    clamp(32px, 6vw, 42px)/1.06 Georgia,
+    serif;
+  margin: 14px 0;
+  outline: none;
+}
+#tutorial-intro {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+#tutorial-points {
+  list-style: none;
+  padding: 0;
+  margin: 26px 0;
+  counter-reset: chapter;
+}
+#tutorial-points li {
+  counter-increment: chapter;
+  position: relative;
+  padding-left: 40px;
+  margin: 20px 0;
+}
+#tutorial-points li::before {
+  content: "0" counter(chapter);
+  position: absolute;
+  left: 0;
+  top: 5px;
+  font:
+    11px ui-monospace,
+    monospace;
+  color: var(--muted);
+}
+#tutorial-points h3 {
+  font:
+    20px Georgia,
+    serif;
+  margin: 0 0 6px;
+}
+#tutorial-points p,
+#tutorial-relay-help p {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+}
+#tutorial-relay-help {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+#tutorial-relay-help summary {
+  cursor: pointer;
+}
+#tutorial-relay-help p {
+  margin-top: 14px;
+}
+#tutorial-relay-help pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  background: #e9eddf;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.tutorial-actions {
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+#tutorial-finish {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 dialog {
   border: 1px solid var(--line);
   background: var(--paper);

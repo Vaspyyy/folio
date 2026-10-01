@@ -130,6 +130,7 @@
             Your encryption key stays on your paired devices. The relay receives
             encrypted library data.
           </p>
+          <button id="show-tutorial" class="secondary">Getting started</button>
         </div>
       </section>
       <section id="privacy-screen" hidden class="empty">
@@ -147,6 +148,56 @@
         <span aria-hidden="true">⇄</span>Devices
       </button>
     </nav>
+    <dialog
+      id="tutorial"
+      aria-labelledby="tutorial-title"
+      aria-describedby="tutorial-intro"
+    >
+      <div class="tutorial-heading">
+        <span class="brand" aria-hidden="true">ƒ.</span>
+        <span class="edition">WELCOME TO FOLIO</span>
+        <button id="tutorial-skip" class="text-button">Skip tutorial</button>
+      </div>
+      <ol id="tutorial-progress" aria-label="Tutorial progress">
+        <li aria-label="Welcome"></li>
+        <li aria-label="Pairing"></li>
+        <li aria-label="Offline reading"></li>
+        <li aria-label="Reading and privacy"></li>
+      </ol>
+      <p id="tutorial-count" class="edition"></p>
+      <h2 id="tutorial-title" tabindex="-1"></h2>
+      <p id="tutorial-intro"></p>
+      <ol id="tutorial-points"></ol>
+      <details id="tutorial-relay-help" hidden>
+        <summary>How do I get a relay address?</summary>
+        <p>On your computer, in the Folio project folder, run:</p>
+        <pre><code>npm ci
+FOLIO_HOST=0.0.0.0 npm run start:portable</code></pre>
+        <p>
+          For the debug Android app on the same Wi-Fi, enter the computer's LAN
+          address, such as <code>http://192.168.1.20:8787</code>, on both
+          devices. Use your computer's address, not this example.
+        </p>
+        <p>
+          Open <code>http://127.0.0.1:8787</code> on the computer for the
+          standalone browser app. Keep the server running for sync. Everyday
+          cross-network use and release Android builds require an HTTPS relay
+          with a trusted certificate.
+        </p>
+        <p>You can use Folio locally without setting up a relay.</p>
+      </details>
+      <p id="tutorial-note" class="hint"></p>
+      <div class="tutorial-actions">
+        <button id="tutorial-back" class="secondary">Back</button>
+        <button id="tutorial-next">Next chapter →</button>
+        <div id="tutorial-finish" hidden>
+          <button id="tutorial-pair">Pair my library</button>
+          <button id="tutorial-local" class="secondary">
+            Use on this device
+          </button>
+        </div>
+      </div>
+    </dialog>
     <dialog id="detail">
       <form id="detail-form">
         <div class="dialog-head">

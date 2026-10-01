@@ -182,13 +182,17 @@ public final class MainActivity extends Activity {
     }
     webView.evaluateJavascript(
         "document.querySelector('#reader').hidden && !document.querySelector('#detail').open &&"
+            + " !document.querySelector('#tutorial').open &&"
             + " document.querySelector('#nav-library').hasAttribute('aria-current')",
         value -> {
           if ("true".equals(value)) MainActivity.super.onBackPressed();
           else
             webView.evaluateJavascript(
-                "document.querySelector('#reader').hidden ? document.querySelector('#detail').open"
-                    + " ? document.querySelector('#detail').close() :"
+                "document.querySelector('#tutorial').open ?"
+                    + " document.querySelector('#tutorial').close() :"
+                    + " document.querySelector('#reader').hidden ?"
+                    + " document.querySelector('#detail').open ?"
+                    + " document.querySelector('#detail').close() :"
                     + " document.querySelector('#nav-library').click() :"
                     + " document.querySelector('#reader-back').click()",
                 null);

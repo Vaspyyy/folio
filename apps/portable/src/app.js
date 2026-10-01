@@ -1,4 +1,5 @@
 import { imageFetch } from "./native-images.js";
+import { setupTutorial } from "./tutorial.js";
 import { openRepository } from "../../../packages/portable-core/repository.js";
 import { itemsOf, randomHex } from "../../../packages/portable-core/model.js";
 import {
@@ -634,6 +635,17 @@ async function boot() {
     if (automatic && !document.hidden) syncNow().catch(() => {});
   }, 20000);
   if (automatic) syncNow().catch((e) => toast(e.message));
+  await setupTutorial(repo, {
+    onPair: () => {
+      navigate("devices");
+      $("pair-input").focus();
+    },
+    onLocal: () => {
+      navigate("library");
+      $("add").focus();
+    },
+    onError: (error) => toast(error.message),
+  });
   if (
     "serviceWorker" in navigator &&
     location.hostname !== "appassets.androidplatform.net"

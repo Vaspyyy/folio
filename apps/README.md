@@ -79,6 +79,15 @@ storage access. Page downloads use a bounded native image transport on Android,
 so image hosts need not grant browser CORS access. Release builds prohibit
 cleartext traffic; WebView debugging is enabled only in debug builds.
 
+## First startup
+
+The Android and standalone browser apps show a four-chapter tutorial on first
+startup. It covers local use, pairing and relay setup, selected offline downloads,
+and reading controls. Choose **Pair my library** to open Devices or **Use on this
+device** to start locally. Completion and skipping are remembered on that device.
+Reopen the tutorial from **Devices → Getting started**. No pairing or network
+connection is required to read the guide.
+
 ## Pair and read
 
 1. Rebuild and reload the extension (`npm run build`, then Reload in the browser's
