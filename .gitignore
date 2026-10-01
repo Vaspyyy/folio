@@ -2,3 +2,10 @@ node_modules/
 dist/
 test-results/
 .mimocode/
+
+build/
+.folio-relay/
+apps/android/.gradle/
+apps/android/**/build/
+apps/android/local.properties
+apps/android/app/src/main/assets/

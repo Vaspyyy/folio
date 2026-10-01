@@ -1,3 +1,5 @@
+> **Folio Pocket:** Android-first library and reader with selected offline titles and encrypted sync. See [the app and pairing guide](apps/README.md). Build the APK with `npm run build:android`.
+
 > **New direction: Folio personal library** — the browser extension in [`extension/`](extension/README.md) now owns the library, personalized unsaved-title discovery, scheduled background catalog refreshes, and a native Folio reader. The source site supplies metadata and page images, but you do not need to keep it open. Build with `npm ci && npm run build`, then load `dist/` as an unpacked Chromium extension. The userscript below remains the legacy ranking tool.
 
 # Multporn Rank by Page Count

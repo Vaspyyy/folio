@@ -9,6 +9,8 @@
   --accent: #c6cf9b;
 }
 * { box-sizing: border-box; }
+/* Reader states use the hidden attribute; layout rules must not override it. */
+[hidden] { display: none !important; }
 html, body { margin: 0; min-height: 100%; background: #0d1714; }
 body { padding: 78px 0 74px; }
 button, select, input { font: inherit; color: inherit; }

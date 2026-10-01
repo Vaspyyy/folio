@@ -190,6 +190,7 @@ $("save").onclick = async () => {
     $("save").textContent = "Saved ✓";
     $("save").setAttribute("aria-pressed", "true");
     await request("progress", { url: sourceUrl, page: current });
+    request("mobilePages", { url: sourceUrl, pages }).catch(() => {});
   } catch (error) {
     showError(error);
   }
@@ -233,7 +234,8 @@ window.addEventListener("keydown", (event) => {
       redirect: "error",
       signal: AbortSignal.timeout(20000),
     });
-    if (!response.ok) throw new Error(`Source returned HTTP ${response.status}`);
+    if (!response.ok)
+      throw new Error(`Source returned HTTP ${response.status}`);
     const html = await response.text();
     if (html.length > 12_000_000) throw new Error("Source page is too large");
     const doc = new DOMParser().parseFromString(html, "text/html");
@@ -247,6 +249,8 @@ window.addEventListener("keydown", (event) => {
     if (record) {
       record = await request("refresh", { metadata });
     }
+    if (record)
+      request("mobilePages", { url: sourceUrl, pages }).catch(() => {});
     $("title").textContent = metadata.title;
     $("author").textContent = metadata.author || "Author not available";
     document.title = `${metadata.title} · Folio Reader`;

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Folio — Your devices</title>
+    <link rel="stylesheet" href="connect.css" />
+  </head>
+  <body>
+    <main>
+      <a href="library.html">← Your library</a
+      ><span class="edition">FOLIO · EVERYWHERE YOU READ</span>
+      <h1>Stay in the<br />same story.</h1>
+      <p>
+        Pair Folio with your phone. Your saved titles, collections, notes and
+        reading position travel privately between your devices.
+      </p>
+      <section>
+        <h2>Connect your library</h2>
+        <label
+          >Relay address<input
+            id="relay"
+            type="url"
+            placeholder="https://sync.example.com" /></label
+        ><button id="create">Create private library</button>
+        <p>Already paired another device?</p>
+        <label
+          >Pairing code<textarea
+            id="join-code"
+            rows="4"
+            placeholder="folio1.…"
+            spellcheck="false"
+          ></textarea></label
+        ><button id="join">Pair this computer</button>
+        <div id="paired" hidden>
+          <label
+            >Your pairing code<textarea
+              id="pair-code"
+              rows="5"
+              readonly
+              spellcheck="false"
+            ></textarea>
+          </label>
+          <p>
+            This code grants access to your library. Share it only with your own
+            devices.
+          </p>
+          <button id="copy">Copy code</button
+          ><button id="sync">Send library / Sync now</button
+          ><button id="disconnect">Disconnect</button>
+        </div>
+        <p id="status" role="status"></p>
+      </section>
+      <p>
+        Once paired, sync runs every minute and when you choose Sync now. Open a
+        saved title in the Folio reader once to share its page list, then select
+        Keep offline on your phone. Page images are downloaded on the phone,
+        separately from encrypted library sync.
+      </p>
+    </main>
+    <script type="module" src="connect.js"></script>
+  </body>
+</html>
