@@ -1,3 +1,4 @@
+import { syncMobile, shareSavedPages } from "./portable/bridge.js";
 import { Library, openDatabase } from "./core/database.js";
 import { canonicalUrl } from "./core/model.js";
 
@@ -207,13 +208,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
 
     const db = await library;
     switch (message.type) {
+      case "mobileSync":
+        return syncMobile(db);
+      case "mobilePages":
+        return shareSavedPages(db, message.url, message.pages);
+
       case "catalog":
         return db.catalog(message.limit);
       case "observeCatalog":
-        return db.observeCatalog(
-          message.items,
-          message.authoritative === true,
-        );
+        return db.observeCatalog(message.items, message.authoritative === true);
       case "listingStatus": {
         if (!Array.isArray(message.urls) || message.urls.length > 100)
           throw new Error("Invalid listing request");
@@ -263,4 +266,12 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     (error) => reply({ ok: false, error: error.message }),
   );
   return true;
+});
+
+chrome.alarms.get("folio-mobile-sync").then((alarm) => {
+  if (!alarm) chrome.alarms.create("folio-mobile-sync", { periodInMinutes: 1 });
+});
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "folio-mobile-sync")
+    library.then(syncMobile).catch(() => {});
 });

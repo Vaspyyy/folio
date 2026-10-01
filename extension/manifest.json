@@ -38,5 +38,9 @@
   ],
   "host_permissions": [
     "https://multporn.net/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
   ]
 }

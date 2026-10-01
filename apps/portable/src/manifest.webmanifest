@@ -1,0 +1,16 @@
+{
+  "name": "Folio — Your stories, everywhere",
+  "short_name": "Folio",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f6f4ec",
+  "theme_color": "#173b32",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

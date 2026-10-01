@@ -5,12 +5,18 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test extension/tests/*.test.js packages/local-recommender/test/*.test.js",
+    "test": "node --test extension/tests/*.test.js packages/local-recommender/test/*.test.js packages/portable-core/test/*.test.js",
     "test:recommender": "node --test packages/local-recommender/test/*.test.js",
     "check": "npm test && npm run build",
-    "test:browser": "npm run build && node scripts/smoke.mjs && node scripts/reader-smoke.mjs && node scripts/bookshelf-smoke.mjs && node scripts/workspace-smoke.mjs && node scripts/recommend-smoke.mjs && node scripts/autonomous-smoke.mjs",
+    "test:browser": "npm run build && node scripts/smoke.mjs && node scripts/reader-smoke.mjs && node scripts/bookshelf-smoke.mjs && node scripts/workspace-smoke.mjs && node scripts/recommend-smoke.mjs && node scripts/autonomous-smoke.mjs && node scripts/reader-state-smoke.mjs",
     "test:live": "npm run build && node scripts/reader-smoke.mjs --live",
-    "format": "prettier --write extension/src extension/tests scripts"
+    "format": "prettier --write extension/src extension/tests scripts",
+    "build:portable": "node scripts/build-portable.mjs",
+    "start:portable": "npm run build:portable && node apps/relay/server.mjs",
+    "test:portable": "node --test packages/portable-core/test/*.test.js",
+    "test:portable:browser": "npm run build:portable && node scripts/portable-smoke.mjs",
+    "build:android": "npm run build:portable && node scripts/build-android.mjs",
+    "test:companion": "npm run build && npm run build:portable && node scripts/companion-smoke.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

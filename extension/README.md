@@ -130,3 +130,12 @@ Tag extraction accepts only explicit `field-name-field-tags` fields in the curre
 title container when available. Navigation, sidebars, related listings, external
 links, and wrappers around title links are excluded. Pages without a recognized
 field yield no tags; live markup compatibility remains unverified.
+
+## Paired Android companion
+
+Open **Your devices** from the library sidebar to pair with Folio Pocket. Library
+metadata and reading progress sync through an encrypted relay. Your browser grants
+access only to the relay origin you select; the manifest lists optional origins
+so arbitrary personal relay servers can be used. Open a saved title in the Folio
+reader once to share its page list, then select **Keep offline** on the phone.
+Unsaved catalog records are not shared. See [the setup guide](../apps/README.md).

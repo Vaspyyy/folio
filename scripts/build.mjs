@@ -9,6 +9,7 @@ await build({
     "ranking-worker": "extension/src/ui/ranking-worker.js",
     offscreen: "extension/src/offscreen.js",
     reader: "extension/src/ui/reader.js",
+    connect: "extension/src/ui/connect.js",
   },
   bundle: true,
   format: "esm",
@@ -36,6 +37,8 @@ for (const [source, target] of [
   ["extension/src/offscreen.html", "offscreen.html"],
   ["extension/src/ui/reader.html", "reader.html"],
   ["extension/src/ui/reader.css", "reader.css"],
+  ["extension/src/ui/connect.html", "connect.html"],
+  ["extension/src/ui/connect.css", "connect.css"],
 ])
   await copyFile(source, `dist/${target}`);
 console.log("Extension built in dist/");

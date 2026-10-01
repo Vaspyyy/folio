@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#173b32" />
+    <title>Folio — Your stories, everywhere</title>
+    <link rel="stylesheet" href="app.css" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#">ƒ.</a
+      ><span class="wordmark">folio<span>Your stories, everywhere</span></span
+      ><button
+        id="privacy"
+        class="icon-button"
+        aria-pressed="false"
+        aria-label="Hide library"
+      >
+        ◉
+      </button>
+    </header>
+    <main id="workspace">
+      <section id="home">
+        <div class="edition">
+          THE POCKET EDITION <span id="sync-indicator">On this device</span>
+        </div>
+        <h1>A world<br />within reach.</h1>
+        <p class="intro">Your shelf. Your place. Wherever you are.</p>
+        <section id="continue-section" hidden>
+          <div class="section-head">
+            <h2>One more chapter.</h2>
+            <span>CONTINUE READING</span>
+          </div>
+          <div id="continue"></div>
+        </section>
+        <div class="section-head">
+          <h2 id="shelf-heading">The bookshelf</h2>
+          <button id="add" class="text-button">＋ Add a title</button>
+        </div>
+        <div class="filters">
+          <input
+            id="search"
+            type="search"
+            placeholder="Find a story on your shelf…"
+            aria-label="Search library"
+          /><select id="filter" aria-label="Reading status">
+            <option value="all">All titles</option>
+            <option value="reading">Reading</option>
+            <option value="planned">Want to read</option>
+            <option value="finished">Finished</option>
+            <option value="favorites">Favorites</option>
+            <option value="queue">Read next</option>
+          </select>
+        </div>
+        <div id="shelf" class="shelf"></div>
+        <div id="empty" class="empty" hidden>
+          <span>✧</span>
+          <h2>Your next chapter starts here.</h2>
+          <p>
+            Pair your computer to bring your library along,<br />or add a title
+            and import its page images.
+          </p>
+          <button id="empty-pair">Pair a device</button>
+        </div>
+      </section>
+      <section id="devices" hidden>
+        <div class="edition">A LIBRARY THAT TRAVELS</div>
+        <h1>Stay in the<br />same story.</h1>
+        <p class="intro">
+          Titles, collections, notes and reading position sync privately. Page
+          downloads stay on each device.
+        </p>
+        <div class="panel">
+          <h2 id="connection-title">Connect your library</h2>
+          <p id="connection-state">
+            Choose a relay you control to pair your devices.
+          </p>
+          <label
+            >Relay address<input
+              id="relay-url"
+              type="url"
+              placeholder="https://sync.example.com"
+              autocomplete="url" /></label
+          ><button id="create-pair">Create private library</button>
+          <div class="divider">OR JOIN AN EXISTING LIBRARY</div>
+          <label
+            >Pairing code<textarea
+              id="pair-input"
+              rows="3"
+              placeholder="folio1.…"
+              spellcheck="false"
+              autocomplete="off"
+            ></textarea></label
+          ><button id="join-pair" class="secondary">Pair this device</button>
+          <div id="paired" hidden>
+            <label
+              >Your pairing code<textarea
+                id="pair-code"
+                rows="4"
+                readonly
+                spellcheck="false"
+              ></textarea>
+            </label>
+            <p class="hint">
+              This code grants access to your library. Share it only with your
+              own devices.
+            </p>
+            <div class="actions">
+              <button id="copy-code" class="secondary">Copy code</button
+              ><button id="sync-now">Sync now</button
+              ><button id="unpair" class="text-button">Disconnect</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Make yourself at home.</h2>
+          <label class="toggle"
+            ><input id="artwork" type="checkbox" /> Show cover artwork</label
+          ><label class="toggle"
+            ><input id="automatic" type="checkbox" checked /> Sync automatically
+            while Folio is open</label
+          >
+          <p class="hint">
+            Your encryption key stays on your paired devices. The relay receives
+            encrypted library data.
+          </p>
+        </div>
+      </section>
+      <section id="privacy-screen" hidden class="empty">
+        <span>◉</span>
+        <h1>A little privacy.</h1>
+        <p>Your library is hidden on this device.</p>
+        <button id="reveal">Reveal library</button>
+      </section>
+    </main>
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <button id="nav-library" aria-current="page">
+        <span aria-hidden="true">▤</span>Library</button
+      ><button id="nav-offline"><span aria-hidden="true">↓</span>Offline</button
+      ><button id="nav-devices">
+        <span aria-hidden="true">⇄</span>Devices
+      </button>
+    </nav>
+    <dialog id="detail">
+      <form id="detail-form">
+        <div class="dialog-head">
+          <span class="edition">YOUR PLACE IN THE STORY</span
+          ><button
+            type="button"
+            id="close-detail"
+            class="icon-button"
+            aria-label="Close details"
+          >
+            ×
+          </button>
+        </div>
+        <h2 id="detail-title">Add a title</h2>
+        <label>Title<input id="edit-title" required maxlength="500" /></label>
+        <div class="two-columns">
+          <label
+            >Reading status<select id="edit-status">
+              <option value="planned">Want to read</option>
+              <option value="reading">Reading</option>
+              <option value="finished">Finished</option>
+              <option value="dropped">Dropped</option>
+            </select></label
+          ><label
+            >Page<input id="edit-page" type="number" min="0" max="1000000"
+          /></label>
+        </div>
+        <label
+          >Collections<input
+            id="edit-collections"
+            placeholder="Favorites, Weekend reads" /></label
+        ><label
+          >Private notes<textarea
+            id="edit-notes"
+            rows="3"
+            maxlength="10000"
+          ></textarea></label
+        ><label class="toggle"
+          ><input id="edit-favorite" type="checkbox" /> Favorite</label
+        ><label class="toggle"
+          ><input id="edit-queued" type="checkbox" /> Read next</label
+        >
+        <div class="actions">
+          <button type="submit">Save changes</button
+          ><button id="read-title" type="button" class="secondary">Read</button>
+        </div>
+        <div class="download-section">
+          <h3>Keep this story close.</h3>
+          <p id="download-info" class="hint"></p>
+          <div class="actions">
+            <button id="download" type="button" class="secondary">
+              Keep offline</button
+            ><button id="import-pages" type="button" class="secondary">
+              Import page images</button
+            ><button id="remove-download" type="button" class="text-button">
+              Remove download
+            </button>
+          </div>
+          <progress id="download-progress" hidden max="100"></progress
+          ><button id="cancel-download" type="button" hidden>
+            Cancel download</button
+          ><input
+            id="page-files"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            hidden
+          />
+        </div>
+        <button id="remove-title" class="danger" type="button">
+          Remove from library
+        </button>
+      </form>
+    </dialog>
+    <section id="reader" hidden>
+      <header class="reader-top">
+        <button id="reader-back" aria-label="Back to library">←</button>
+        <div>
+          <span class="edition">FOLIO READER</span
+          ><strong id="reader-title"></strong>
+        </div>
+        <button id="reader-tools" aria-label="Toggle reading controls">
+          ⋯
+        </button>
+      </header>
+      <div id="reader-options">
+        <label
+          >Mode<select id="reader-mode" aria-label="Mode">
+            <option value="paged">Paged</option>
+            <option value="continuous">Continuous</option>
+          </select></label
+        ><label
+          >Fit<select id="reader-fit" aria-label="Fit">
+            <option value="width">Width</option>
+            <option value="height">Height</option>
+            <option value="natural">Original</option>
+          </select></label
+        ><label
+          >Zoom<input
+            id="reader-zoom"
+            type="range"
+            min="60"
+            max="160"
+            value="100"
+            step="5" /></label
+        ><button id="reader-fullscreen">Fullscreen</button>
+      </div>
+      <div id="reader-stage"></div>
+      <footer class="reader-bottom">
+        <button id="previous">←</button>
+        <div>
+          <span id="reader-position"></span
+          ><progress id="reader-progress" max="100"></progress>
+        </div>
+        <button id="next">→</button>
+      </footer>
+    </section>
+    <p id="toast" role="status" hidden></p>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
