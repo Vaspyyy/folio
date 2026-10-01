@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Folio — Personal Comic Library",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A local-first comic library with autonomous discovery and a native reader.",
   "action": {
     "default_title": "Open Folio library"

@@ -131,7 +131,7 @@ title container when available. Navigation, sidebars, related listings, external
 links, and wrappers around title links are excluded. Pages without a recognized
 field yield no tags; live markup compatibility remains unverified.
 
-## Paired Android companion
+## Paired Android companion (0.7.0)
 
 Open **Your devices** from the library sidebar to pair with Folio Pocket. Library
 metadata and reading progress sync through an encrypted relay. Your browser grants
